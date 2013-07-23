@@ -1,0 +1,11 @@
+# Application standards settings
+%application.name%:deployer:crontab
+%application.directory%:/var/www/deploy-test:crontab
+%application.environment%:testing:crontab
+%application.url%:https\://github.com/henriquemoody/deployer:index.html
+
+# Application log settings
+%application.log.directory%:/var/log/deployer:crontab|logrotate
+
+# Application email settings
+%application.email.devops%:henriquemoody@gmail.com:crontab

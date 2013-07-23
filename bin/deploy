@@ -1,0 +1,422 @@
+#!/usr/bin/env bash
+# Usage: {script} [ OPTIONS ]
+#
+#   --help, -h      Displays this help
+#   --env, -e       Environment to deploy
+#   --timeout, -m   SSH connection checking timeout
+#   --tree-ish, -i  Tree-Ish (branch or tag)
+#   --type, -t      Type of deploy ("upgrade" or "rollback")
+#   --verbose, -v   Enable verbose mode
+#
+# Report bugs to Henrique Moody <henriquemoody@gmail.com>
+#
+
+declare -r SCRIPT=$(readlink "${0}" 2> /dev/null || echo "${0}")
+declare -r SCRIPT_NAME=$(basename ${0})
+declare -r TIMESTAMP=$(date '+%s')
+declare -r DATETIME=$(date '+%Y-%m-%d %H:%M:%S')
+declare -r DELIMITER=":"
+declare -r LOCAL_ADDRESS=$(hostname)
+declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoami)
+declare -r ROOT_DIRECTORY=$(cd "$(dirname "${SCRIPT}")/.." && pwd)
+declare -r DEFAULT_CONFIG="${ROOT_DIRECTORY}/etc/default.conf"
+declare -r APPLICATION_SOURCE="${ROOT_DIRECTORY}/var/source"
+
+declare SSH_CONNECTION_TIMEOUT=5
+declare DEPLOY_TYPE="upgrade"
+declare VERBOSE=""
+declare ENVIRONMENT="live"
+declare TREE_ISH="master"
+
+## -------------------------------------------------------------------------- ##
+source "${ROOT_DIRECTORY}/src/check/access.bash"
+source "${ROOT_DIRECTORY}/src/conf/get.bash"
+source "${ROOT_DIRECTORY}/src/deploy/cleanup.bash"
+source "${ROOT_DIRECTORY}/src/deploy/finish.bash"
+source "${ROOT_DIRECTORY}/src/deploy/prepare.bash"
+source "${ROOT_DIRECTORY}/src/echo.bash"
+source "${ROOT_DIRECTORY}/src/help.bash"
+source "${ROOT_DIRECTORY}/src/lock/create.bash"
+source "${ROOT_DIRECTORY}/src/lock/remove.bash"
+
+## -------------------------------------------------------------------------- ##
+
+
+while [[ "${1}" = -* ]]; do
+    case "${1}" in
+
+        --help | -h)
+            _help
+            exit 0
+        ;;
+
+        --verbose | -v)
+            VERBOSE="v"
+            shift 1
+        ;;
+
+        --timeout | -m)
+            SSH_CONNECTION_TIMEOUT="${2}"
+            shift 2
+        ;;
+
+        --env | -e)
+            ENVIRONMENT="${2}"
+            shift 2
+        ;;
+
+        --tree-ish | -i)
+            TREE_ISH="${2}"
+            shift 2
+        ;;
+
+        --type | -t)
+            if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
+                _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info."
+                exit 9
+            fi
+
+            DEPLOY_TYPE="${2}"
+            shift 2
+        ;;
+
+        -*)
+            _echo "<31>Unrecognized option '${1}'. Run '--help' for more info."
+            exit 23
+        ;;
+
+    esac
+done
+
+## -------------------------------------------------------------------------- ##
+_echo "<32;4>Deployer<0>"
+_echo "<36>Deploying as ${DEPLOY_USER}<0>\n"
+
+## -------------------------------------------------------------------------- ##
+declare DEPLOY_CHANGELOG
+declare DEPLOY_REVISION
+declare DEPLOY_DESCRIPTION
+
+declare ENVIRONMENT_CONFIG="${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.conf"
+declare ENVIRONMENT_SERVERS="${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.servers"
+declare ENVIRONMENT_OVERLAY="${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.overlay"
+
+declare ENVIRONMENT_CURRENT="${ROOT_DIRECTORY}/var/${ENVIRONMENT}"
+declare ENVIRONMENT_NEWEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.newest"
+declare ENVIRONMENT_OLDEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.oldest"
+
+declare DEPLOY_LOG_FILE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}.log"
+declare DEPLOY_LOCK_FILE="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.lock"
+
+declare APPLICATION_NAME=$(_conf_get Name)
+declare APPLICATION_DIRECTORY=$(_conf_get Directory)
+declare APPLICATION_REPOSITORY=$(_conf_get Repository)
+declare APPLICATION_OWNER=$(_conf_get FileSystemOwner)
+declare APPLICATION_GROUP=$(_conf_get FileSystemGroup)
+
+if [ ! -f "${ENVIRONMENT_CONFIG}" ]; then
+    _echo "<31>Unable to find configuration file ${ENVIRONMENT_CONFIG}" 1>&2
+    exit 2
+fi
+
+if [ -t 1 ]; then
+    _echo -n "Are you sure that you want to deploy <32>${DEPLOY_TYPE}<0>"
+    if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
+        _echo -n " from <32>${TREE_ISH}<0>"
+    fi
+    _echo -n " on <32>${ENVIRONMENT}<0> environment? [y/N]: "
+    read answer
+else
+    _echo "You can not run \`${SCRIPT_NAME}\` in non-interactive mode."
+    exit 3
+fi
+
+parsed_answer=$(echo ${answer} | tr '[:lower:]' '[:upper:]')
+if [[ "${parsed_answer}" != 'Y' ]] && [[ "${parsed_answer}" != 'YES' ]]; then
+    _echo "<31>Deploy aborted<0>"
+    exit 7
+elif [ -f "${DEPLOY_LOCK_FILE}" ]; then
+    _echo "<31>A deploy on this environment is already running. Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>"
+    exit 7
+fi
+
+_lock_create
+
+DEPLOY_DESCRIPTION="Deploy ${DEPLOY_TYPE} of ${TREE_ISH} on ${ENVIRONMENT}"
+
+_echo
+
+_echo -n "<32>Deploying \"${DEPLOY_TYPE}\"<0>"
+if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
+    _echo -n "<32> from \"${TREE_ISH}\"<0>"
+fi
+_echo "<32> on \"${ENVIRONMENT}\" environment<0>"
+
+_echo "${DATETIME}" > "${DEPLOY_LOG_FILE}"
+
+## -------------------------------------------------------------------------- ##
+_echo "\n<33>Checking access to servers<0>"
+
+PIDS=""
+IS_ALLOWED=1
+while read line; do
+    test -z "${line}" && continue
+
+    server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
+    server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
+
+    _check_access "${server_name}" "${server_address}" 2>/dev/null &
+    PIDS="${PIDS} ${!}"
+
+done < "${ENVIRONMENT_SERVERS}"
+
+for PID in ${PIDS}; do
+    test -z ${PID} &&
+        continue
+
+    wait ${PID}
+    if [[ ${?} -gt 0 ]]; then
+        IS_ALLOWED=0
+    fi
+done
+
+test ${IS_ALLOWED} -eq 0 &&
+    _echo "Please, check your SSH key or server availability and try again later." 1>&2 &&
+    _lock_remove &&
+    exit 13
+
+## -------------------------------------------------------------------------- ##
+
+if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
+
+    ## ---------------------------------------------------------------------- ##
+    _echo "\n<33>Fetching data from remote repository<0>"
+    if [ ! -d "${APPLICATION_SOURCE}/.git" ]; then
+        git clone "${APPLICATION_REPOSITORY}" "${APPLICATION_SOURCE}"
+    fi
+    cd "${APPLICATION_SOURCE}"
+    git fetch origin
+
+    if [ -d "${ENVIRONMENT_NEWEST}" ]; then
+        _echo "\n<33>Removing trash of some older deploy<0>"
+        rm -rf "${ENVIRONMENT_NEWEST}"
+    fi
+
+    ## ---------------------------------------------------------------------- ##
+    _echo "\n<33>Preparing application code<0>"
+
+    _echo "* Creating new code"
+    mkdir -p "${ENVIRONMENT_NEWEST}"
+
+    git tag -l | egrep -q "^${TREE_ISH}$"
+    if [[ ${?} -gt 0 ]]; then
+        TREE_ISH="origin/${TREE_ISH}"
+    fi
+    git archive "${TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
+
+    if [[ ${?} -gt 0 ]]; then
+        _echo "<31>Failure creating new code<0>"
+        _lock_remove
+        exit 92
+    fi
+
+    GIT_LOG=$(git log -n1 --format='format:%h|%aN <%ae>|%s' "${TREE_ISH}")
+    GIT_LOG_HASH=$(echo "${GIT_LOG}" | cut -d '|' -f 1)
+    GIT_LOG_AUTHOR=$(echo "${GIT_LOG}" | cut -d '|' -f 2)
+    GIT_LOG_SUBJECT=$(echo "${GIT_LOG}" | cut -d '|' -f 3-)
+
+    REV_CONTENT="Timestamp: ${TIMESTAMP}\n"
+    REV_CONTENT="${REV_CONTENT}Date-Time: ${DATETIME}\n"
+    REV_CONTENT="${REV_CONTENT}Tree-Ish:  ${TREE_ISH}\n"
+    REV_CONTENT="${REV_CONTENT}Author:    ${GIT_LOG_AUTHOR}\n"
+    REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
+    REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
+    _echo "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
+
+    chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" .
+
+    if [ -d "${ENVIRONMENT_OLDEST}" ]; then
+        _echo "* Removing old code"
+        rm -rf "${ENVIRONMENT_OLDEST}"
+    fi
+
+    if [ -d "${ENVIRONMENT_CURRENT}" ]; then
+        _echo "* Creating backup of current code"
+        mv "${ENVIRONMENT_CURRENT}" "${ENVIRONMENT_OLDEST}"
+    fi
+
+    _echo "* Replacing current code with the new code"
+    mv "${ENVIRONMENT_NEWEST}" "${ENVIRONMENT_CURRENT}"
+
+    cd "${OLDPWD}"
+    cd "${ENVIRONMENT_CURRENT}"
+
+    test -f "${ROOT_DIRECTORY}/etc/default.hooks/build-post" &&
+        cp "${ROOT_DIRECTORY}/etc/default.hooks/build-post" "env-build-post.hook"
+    test -f "${ROOT_DIRECTORY}/etc/default.hooks/deploy-pre" &&
+        cp "${ROOT_DIRECTORY}/etc/default.hooks/deploy-pre" "env-deploy-pre.hook"
+    test -f "${ROOT_DIRECTORY}/etc/default.hooks/deploy-post" &&
+        cp "${ROOT_DIRECTORY}/etc/default.hooks/deploy-post" "env-deploy-post.hook"
+
+    test -f "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/build-post" &&
+        cp "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/build-post" "env-build-post.hook"
+    test -f "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-pre" &&
+        cp "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-pre" "env-deploy-pre.hook"
+    test -f "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-post" &&
+        cp "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-post" "env-deploy-post.hook"
+
+    _echo "* Applying overlays"
+    export LC_ALL=C
+    cat "${ENVIRONMENT_OVERLAY}" |
+        egrep -v '^(#.+|\s*)$' |
+        sed -e 's/\\:/\d255/g' |
+        while read line; do
+            variable=$(echo "${line}" | cut -d : -f 1)
+            value=$(echo "${line}" | cut -d : -f 2 | sed -e 's/\d255/\\:/g')
+            patterns=$(echo "${line}" | cut -d : -f 3)
+            IFS='|'
+            for pattern in ${patterns}; do
+                find . -name "${pattern}" -print0 | xargs -0 sed -i "s:${variable}:${value}:g"
+            done
+            IFS=' '
+        done
+
+    _echo "* Running build post hooks"
+
+    OUTPUT_FILE="/tmp/${$}.log"
+
+    if [ -f default-build-post.hook ]; then
+        sh default-build-post.hook > "${OUTPUT_FILE}" 2>&1
+        if [[ ${?} -gt 0 ]]; then
+            _echo "An error occurred running \`default-build-post.hook\`." &&
+                _lock_remove &&
+                cat "${OUTPUT_FILE}" &&
+                exit 120
+        fi
+    fi
+
+    if [ -f env-build-post.hook ]; then
+        sh env-build-post.hook > "${OUTPUT_FILE}" 2>&1
+        if [[ ${?} -gt 0 ]]; then
+            _echo "An error occurred running \`env-build-post.hook\`." &&
+                _lock_remove &&
+                cat "${OUTPUT_FILE}" &&
+                exit 121
+        fi
+    fi
+
+    cd "${OLDPWD}"
+
+    DEPLOY_REVISION="${GIT_LOG_HASH}"
+    DEPLOY_CHANGELOG="${GIT_LOG_AUTHOR}: ${GIT_LOG_SUBJECT}"
+else
+    DEPLOY_REVISION=$(cat "${ENVIRONMENT_OLDEST}" | grep Commit | cut -d ' ' -f 2-)
+    DEPLOY_CHANGELOG=$(cat "${ENVIRONMENT_OLDEST}" | grep Message | cut -d ' ' -f 2-)
+fi
+
+## -------------------------------------------------------------------------- ##
+_echo "\n<33>Syncing code on servers<0>"
+PIDS=""
+IS_SYNCED=1
+DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION}. Servers:"
+while read line; do
+    test -z "${line}" && continue
+
+    server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
+    server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
+
+    _deploy_prepare "${server_name}" "${server_address}" 2>> "${DEPLOY_LOG_FILE}" &
+    PIDS="${PIDS} ${!}"
+
+    DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} ${server_name} (${server_address}),"
+
+done < "${ENVIRONMENT_SERVERS}"
+
+for PID in ${PIDS}; do
+    test -z ${PID} &&
+        continue
+
+    wait ${PID}
+    if [[ ${?} -gt 0 ]]; then
+        IS_SYNCED=0
+    fi
+done
+
+test ${IS_SYNCED} -eq 0 &&
+    _echo "An error occurred when syncing servers. Please check with the administrator." &&
+    _lock_remove &&
+    exit 14
+
+DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} was successful done."
+
+## -------------------------------------------------------------------------- ##
+if [[ "$(_conf_get NewRelicNotification)" = "On" ]]; then
+    _echo '\n<33>Sending New Relic deploy notification'
+
+    curl \
+        -H "x-api-key:$(_conf_get NewRelicApiKey)" \
+        -d "deployment[application_id]=$(_conf_get NewRelicApplicationId)" \
+        -d "deployment[host]=${LOCAL_ADDRESS}" \
+        -d "deployment[description]=${DEPLOY_DESCRIPTION}" \
+        -d "deployment[revision]=${DEPLOY_REVISION}" \
+        -d "deployment[changelog]=${DEPLOY_CHANGELOG}" \
+        -d "deployment[user]=${DEPLOY_USER}" \
+        https://rpm.newrelic.com/deployments.xml > /dev/null
+fi
+
+## -------------------------------------------------------------------------- ##
+_echo "\n<33>Deploying code on servers<0>"
+
+PIDS=""
+IS_DEPLOYED=1
+while read line; do
+    test -z "${line}" && continue
+
+    server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
+    server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
+
+    _deploy_finish "${server_name}" "${server_address}" 2>> "${DEPLOY_LOG_FILE}" &
+    PIDS="${PIDS} ${!}"
+
+done < "${ENVIRONMENT_SERVERS}"
+
+for PID in ${PIDS}; do
+    test -z ${PID} &&
+        continue
+
+    wait ${PID}
+    if [[ ${?} -gt 0 ]]; then
+        IS_DEPLOYED=0
+    fi
+done
+
+test ${IS_DEPLOYED} -eq 0 &&
+    _echo "An error occurred when deploying to servers. Please check with the administrator." &&
+    _lock_remove &&
+    exit 14
+
+## -------------------------------------------------------------------------- ##
+_echo "\n<33>Cleaning code on servers<0>"
+
+while read line; do
+    test -z "${line}" && continue
+
+    server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
+    server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
+
+    _deploy_cleanup "${server_name}" "${server_address}" 2>> "${DEPLOY_LOG_FILE}" &
+
+done < "${ENVIRONMENT_SERVERS}"
+
+wait
+
+## -------------------------------------------------------------------------- ##
+_echo "\n<33>Successful on deploying!<0>"
+_echo "* Application:   ${APPLICATION_NAME}"
+_echo "* Environment:   ${ENVIRONMENT}"
+_echo "* Started at:    ${DATETIME}"
+_echo "* Finished at:   $(date '+%Y-%m-%d %H:%M:%S')"
+_echo "* Tree-Ish:      ${TREE_ISH}"
+_echo "* Type:          ${DEPLOY_TYPE}"
+
+_lock_remove
