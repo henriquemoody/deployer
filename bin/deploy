@@ -91,10 +91,6 @@ while [[ "${1}" = -* ]]; do
 done
 
 ## -------------------------------------------------------------------------- ##
-_echo "<32;4>Deployer<0>"
-_echo "<36>Deploying as ${DEPLOY_USER}<0>\n"
-
-## -------------------------------------------------------------------------- ##
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     _echo -n "First time running this script? Choose the directory where I will find the configurations files: \n> "
     read -e SETTINGS_DIRECTORY
@@ -183,6 +179,10 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
 else
     SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
 fi
+
+## -------------------------------------------------------------------------- ##
+_echo "<32;4>Deployer<0>"
+_echo "<36>Deploying <36;1>$(_conf_get "Name" "${APPLICATION_CONFIG}")<0><36> as <36;1>${DEPLOY_USER}<0>\n"
 
 ## -------------------------------------------------------------------------- ##
 declare DEPLOY_CHANGELOG

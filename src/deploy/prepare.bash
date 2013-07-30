@@ -5,13 +5,18 @@ _deploy_prepare()
 
     if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         ssh "root@${server_address}" <<EOF
-mkdir -p ${APPLICATION_DIRECTORY}
-
-test ! -d "${APPLICATION_DIRECTORY}.current" &&
-    rsync -arzO${VERBOSE} -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" "${APPLICATION_DIRECTORY}.current"
 
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
+fi
+
+mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")"
+chown "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
+
+if [[ ! -d "${APPLICATION_DIRECTORY}.current" ]]; then
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" mkdir -p${VERBOSE} "${APPLICATION_DIRECTORY}.current"
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
+    rsync -arzO${VERBOSE} -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" "${APPLICATION_DIRECTORY}.current"
 fi
 
 cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest" &&
