@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Usage: {script} DIRECTORY OWNER GROUP ENVIRONMENT ADDRESS
+#
+#   DIRECTORY       Applications's directory
+#   OWNER           File system owner
+#   GROUP           File system group
+#   ENVIRONMENT     Current environment
+#   ADDRESS         Current server address
+#

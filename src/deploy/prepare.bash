@@ -5,6 +5,8 @@ _deploy_prepare()
 
     if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         ssh "root@${server_address}" <<EOF
+mkdir -p ${APPLICATION_DIRECTORY}
+
 test ! -d "${APPLICATION_DIRECTORY}.current" &&
     rsync -arzO${VERBOSE} -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" "${APPLICATION_DIRECTORY}.current"
 
@@ -21,18 +23,6 @@ test ${?} -gt 0 &&
 
 chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${APPLICATION_DIRECTORY}.newest"
 
-test -d "${APPLICATION_DIRECTORY}.newest/bo/public/file" &&
-    mv "${APPLICATION_DIRECTORY}.newest/bo/public/file" "${APPLICATION_DIRECTORY}.newest/bo/public/file.backup"
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn /mnt/nfs/telex_public/bo/public/file "${APPLICATION_DIRECTORY}.newest/bo/public/file"
-
-test -d "${APPLICATION_DIRECTORY}.newest/sig/public/file" &&
-    mv "${APPLICATION_DIRECTORY}.newest/sig/public/file" "${APPLICATION_DIRECTORY}.newest/sig/public/file.backup"
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn /mnt/nfs/telex_public/sig/public/file "${APPLICATION_DIRECTORY}.newest/sig/public/file"
-
-test -d "${APPLICATION_DIRECTORY}.newest/sig/public/pagamentos" &&
-    mv "${APPLICATION_DIRECTORY}.newest/sig/public/pagamentos" "${APPLICATION_DIRECTORY}.newest/sig/public/pagamentos.backup"
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn /mnt/nfs/telex_public/sig/public/pagamentos "${APPLICATION_DIRECTORY}.newest/sig/public/pagamentos"
-
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.backup" "${APPLICATION_DIRECTORY}"
 
@@ -41,8 +31,22 @@ mv "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.oldest"
 mv "${APPLICATION_DIRECTORY}.newest" "${APPLICATION_DIRECTORY}.current"
 
 cd "${APPLICATION_DIRECTORY}.current"
-test -f default-deploy-pre.hook && sh default-deploy-pre.hook
-test -f env-deploy-pre.hook && sh env-deploy-pre.hook
+
+test -f remote-pre-default.hook &&
+    sh remote-pre-default.hook -s \
+        "${APPLICATION_DIRECTORY}" \
+        "${APPLICATION_OWNER}" \
+        "${APPLICATION_GROUP}" \
+        "${ENVIRONMENT}" \
+        "${server_address}"
+
+test -f remote-pre-env.hook &&
+    sh remote-pre-env.hook -s \
+        "${APPLICATION_DIRECTORY}" \
+        "${APPLICATION_OWNER}" \
+        "${APPLICATION_GROUP}" \
+        "${ENVIRONMENT}" \
+        "${server_address}"
 
 EOF
     else

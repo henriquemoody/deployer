@@ -12,8 +12,23 @@ fi
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
 
 cd "${APPLICATION_DIRECTORY}.current"
-test -f default-deploy-post.hook && sh default-deploy-post.hook
-test -f env-deploy-post.hook && sh env-deploy-post.hook
+
+test -f remote-post-default.hook &&
+    sh remote-post-default.hook -s \
+        "${APPLICATION_DIRECTORY}" \
+        "${APPLICATION_OWNER}" \
+        "${APPLICATION_GROUP}" \
+        "${ENVIRONMENT}" \
+        "${server_address}"
+
+test -f remote-post-env.hook &&
+    sh remote-post-env.hook -s \
+        "${APPLICATION_DIRECTORY}" \
+        "${APPLICATION_OWNER}" \
+        "${APPLICATION_GROUP}" \
+        "${ENVIRONMENT}" \
+        "${server_address}"
+
 rm -f *.hook
 EOF
 

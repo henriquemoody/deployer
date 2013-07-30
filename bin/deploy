@@ -343,19 +343,19 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     cd "${OLDPWD}"
     cd "${ENVIRONMENT_CURRENT}"
 
-    test -f "${SETTINGS_DIRECTORY}/default.hooks/build-post" &&
-        cp "${SETTINGS_DIRECTORY}/default.hooks/build-post" "env-build-post.hook"
-    test -f "${SETTINGS_DIRECTORY}/default.hooks/deploy-pre" &&
-        cp "${SETTINGS_DIRECTORY}/default.hooks/deploy-pre" "env-deploy-pre.hook"
-    test -f "${SETTINGS_DIRECTORY}/default.hooks/deploy-post" &&
-        cp "${SETTINGS_DIRECTORY}/default.hooks/deploy-post" "env-deploy-post.hook"
+    test -f "${SETTINGS_DIRECTORY}/default.hooks/local-pre" &&
+        cp "${SETTINGS_DIRECTORY}/default.hooks/local-pre" "local-pre-default.hook"
+    test -f "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" &&
+        cp "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" "remote-pre-default.hook"
+    test -f "${SETTINGS_DIRECTORY}/default.hooks/remote-post" &&
+        cp "${SETTINGS_DIRECTORY}/default.hooks/remote-post" "remote-post-default.hook"
 
-    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/build-post" &&
-        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/build-post" "env-build-post.hook"
-    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-pre" &&
-        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-pre" "env-deploy-pre.hook"
-    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-post" &&
-        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-post" "env-deploy-post.hook"
+    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" &&
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" "local-pre-env.hook"
+    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" &&
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" "remote-pre-env.hook"
+    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" &&
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "remote-post-env.hook"
 
     _echo "* Applying overlays"
     export LC_ALL=C
@@ -377,20 +377,20 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     OUTPUT_FILE="/tmp/${$}.log"
 
-    if [ -f default-build-post.hook ]; then
-        sh default-build-post.hook > "${OUTPUT_FILE}" 2>&1
+    if [ -f "local-pre-default.hook" ]; then
+        sh "local-pre-default.hook" > "${OUTPUT_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
-            _echo "An error occurred running \`default-build-post.hook\`." &&
+            _echo "An error occurred running \`local-pre-default.hook\`." &&
                 _lock_remove &&
                 cat "${OUTPUT_FILE}" &&
                 exit 120
         fi
     fi
 
-    if [ -f env-build-post.hook ]; then
-        sh env-build-post.hook > "${OUTPUT_FILE}" 2>&1
+    if [ -f "local-pre-env.hook" ]; then
+        sh "local-pre-env.hook" > "${OUTPUT_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
-            _echo "An error occurred running \`env-build-post.hook\`." &&
+            _echo "An error occurred running \`local-pre-env.hook\`." &&
                 _lock_remove &&
                 cat "${OUTPUT_FILE}" &&
                 exit 121
