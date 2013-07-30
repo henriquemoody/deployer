@@ -37,21 +37,23 @@ mv "${APPLICATION_DIRECTORY}.newest" "${APPLICATION_DIRECTORY}.current"
 
 cd "${APPLICATION_DIRECTORY}.current"
 
-test -f remote-pre-default.hook &&
+if [[ -f remote-pre-default.hook ]]; then
     sh remote-pre-default.hook \
         "${APPLICATION_DIRECTORY}" \
         "${APPLICATION_OWNER}" \
         "${APPLICATION_GROUP}" \
         "${ENVIRONMENT}" \
         "${server_address}"
+fi
 
-test -f remote-pre-env.hook &&
+if [[ -f remote-pre-env.hook ]]; then
     sh remote-pre-env.hook \
         "${APPLICATION_DIRECTORY}" \
         "${APPLICATION_OWNER}" \
         "${APPLICATION_GROUP}" \
         "${ENVIRONMENT}" \
         "${server_address}"
+fi
 
 EOF
     else

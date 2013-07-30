@@ -13,21 +13,23 @@ sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_
 
 cd "${APPLICATION_DIRECTORY}.current"
 
-test -f remote-post-default.hook &&
+if [[ -f remote-post-default.hook ]]; then
     sh remote-post-default.hook \
         "${APPLICATION_DIRECTORY}" \
         "${APPLICATION_OWNER}" \
         "${APPLICATION_GROUP}" \
         "${ENVIRONMENT}" \
         "${server_address}"
+fi
 
-test -f remote-post-env.hook &&
+if [[ -f remote-post-env.hook ]]; then
     sh remote-post-env.hook \
         "${APPLICATION_DIRECTORY}" \
         "${APPLICATION_OWNER}" \
         "${APPLICATION_GROUP}" \
         "${ENVIRONMENT}" \
         "${server_address}"
+fi
 
 rm -f *.hook
 EOF
