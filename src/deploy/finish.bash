@@ -14,7 +14,7 @@ sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_
 cd "${APPLICATION_DIRECTORY}.current"
 
 test -f remote-post-default.hook &&
-    sh remote-post-default.hook -s \
+    sh remote-post-default.hook \
         "${APPLICATION_DIRECTORY}" \
         "${APPLICATION_OWNER}" \
         "${APPLICATION_GROUP}" \
@@ -22,7 +22,7 @@ test -f remote-post-default.hook &&
         "${server_address}"
 
 test -f remote-post-env.hook &&
-    sh remote-post-env.hook -s \
+    sh remote-post-env.hook \
         "${APPLICATION_DIRECTORY}" \
         "${APPLICATION_OWNER}" \
         "${APPLICATION_GROUP}" \
