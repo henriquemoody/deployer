@@ -13,14 +13,15 @@
 
 declare -r SCRIPT=$(readlink "${0}" 2> /dev/null || echo "${0}")
 declare -r SCRIPT_NAME=$(basename ${0})
-declare -r TIMESTAMP=$(date '+%s')
+declare -r ROOT_DIRECTORY=$(cd "$(dirname "${SCRIPT}")/.." && pwd)
+
+declare -r APPLICATION_CONFIG="${ROOT_DIRECTORY}/.conf"
+declare -r APPLICATION_SOURCE="${ROOT_DIRECTORY}/var/source"
 declare -r DATETIME=$(date '+%Y-%m-%d %H:%M:%S')
 declare -r DELIMITER=":"
-declare -r LOCAL_ADDRESS=$(hostname)
 declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoami)
-declare -r ROOT_DIRECTORY=$(cd "$(dirname "${SCRIPT}")/.." && pwd)
-declare -r DEFAULT_CONFIG="${ROOT_DIRECTORY}/etc/default.conf"
-declare -r APPLICATION_SOURCE="${ROOT_DIRECTORY}/var/source"
+declare -r LOCAL_ADDRESS=$(hostname)
+declare -r TIMESTAMP=$(date '+%s')
 
 declare SSH_CONNECTION_TIMEOUT=5
 declare DEPLOY_TYPE="upgrade"
@@ -31,6 +32,7 @@ declare TREE_ISH="master"
 ## -------------------------------------------------------------------------- ##
 source "${ROOT_DIRECTORY}/src/check/access.bash"
 source "${ROOT_DIRECTORY}/src/conf/get.bash"
+source "${ROOT_DIRECTORY}/src/conf/set.bash"
 source "${ROOT_DIRECTORY}/src/deploy/cleanup.bash"
 source "${ROOT_DIRECTORY}/src/deploy/finish.bash"
 source "${ROOT_DIRECTORY}/src/deploy/prepare.bash"
@@ -93,13 +95,103 @@ _echo "<32;4>Deployer<0>"
 _echo "<36>Deploying as ${DEPLOY_USER}<0>\n"
 
 ## -------------------------------------------------------------------------- ##
-declare DEPLOY_CHANGELOG
-declare DEPLOY_REVISION
-declare DEPLOY_DESCRIPTION
+if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
+    _echo -n "First time running this script? Choose the directory where I will find the configurations files: \n> "
+    read -e SETTINGS_DIRECTORY
+    if [[ ! -d "${SETTINGS_DIRECTORY}" ]]; then
+        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid directory." 1>&2
+        exit 98
+    fi
+    if [[ ! -w "${SETTINGS_DIRECTORY}" ]]; then
+        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable." 1>&2
+        exit 99
+    fi
+    cp -r "${ROOT_DIRECTORY}/etc/"* "${SETTINGS_DIRECTORY}/"
+    rm -f "${SETTINGS_DIRECTORY}/default.conf"
 
-declare ENVIRONMENT_CONFIG="${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.conf"
-declare ENVIRONMENT_SERVERS="${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.servers"
-declare ENVIRONMENT_OVERLAY="${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.overlay"
+    _echo "<32>Please fill the data below"
+    _echo
+
+    _echo -n "Application's name: "
+    read InputName
+    test -z "${InputName}" &&
+        _echo "Application's name can not be empty" 1>&2 &&
+        exit 107
+
+    _echo -n "Remote application's directory: "
+    read InputDirectory
+    test -z "${InputDirectory}" &&
+        _echo "Application's remote directory can not be empty" 1>&2 &&
+        exit 107
+
+    _echo -n "Application's GIT repository: "
+    read InputRepository
+    test -z "${InputRepository}" &&
+        _echo "Application's GIT repository can not be empty" 1>&2 &&
+        exit 107
+    if [[ -d "${APPLICATION_SOURCE}" ]]; then
+        rm -rf "${APPLICATION_SOURCE}"
+    fi
+    git clone --quiet "${InputRepository}" "${APPLICATION_SOURCE}"
+    if [[ ${?} -gt 0 ]]; then
+        _echo "<31>Unable to clone GIT repository" 1>&2
+        exit 107
+    fi
+
+    _echo -n "File system owner (default \"www-data\"): "
+    read InputFileSystemOwner
+    if [[ -z "${InputFileSystemOwner}" ]]; then
+       InputFileSystemOwner="www-data"
+    fi
+
+    id "${InputFileSystemOwner}" 1> /dev/null 2>&1
+    if [[ ${?} -gt 0 ]]; then
+        _echo "<31>User ${InputFileSystemOwner} does not exists" 1>&2 &&
+        exit 108
+    fi
+
+    _echo -n "File system group (default \"www-data\"): "
+    read InputFileSystemGroup
+    if [[ -z "${InputFileSystemGroup}" ]]; then
+       InputFileSystemGroup="www-data"
+    fi
+
+    _echo -n "Do you want to enable New Relic notifications? [y/N]: "
+    read InputEnableNewRelicNotification
+    InputEnableNewRelicNotification=$(echo "${InputEnableNewRelicNotification}" | tr [a-z] [A-Z])
+    if [[ "${InputEnableNewRelicNotification}" = 'Y' ]]  || [[ "${InputEnableNewRelicNotification}" = 'YES' ]]; then
+        InputNewRelicNotification="On"
+        _echo -n "  > Your New Relic API key: "
+        read InputNewRelicApiKey
+        _echo -n "  > Your New Relic application id: "
+        read InputNewRelicApplicationId
+    else
+        InputNewRelicNotification="Off"
+        InputNewRelicApiKey=""
+        InputNewRelicApplicationId=""
+    fi
+
+    _conf_set "Name" "${InputName}"
+    _conf_set "Directory" "${InputDirectory}"
+    _conf_set "Repository" "${InputRepository}"
+    _conf_set "FileSystemOwner" "${InputFileSystemOwner}"
+    _conf_set "FileSystemGroup" "${InputFileSystemGroup}"
+    _conf_set "NewRelicNotification" "${InputNewRelicNotification}"
+    _conf_set "NewRelicApiKey" "${InputNewRelicApiKey}"
+    _conf_set "NewRelicApplicationId" "${InputNewRelicApplicationId}"
+    _conf_set "SettingsDirectory" "${SETTINGS_DIRECTORY}"
+else
+    SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
+fi
+
+## -------------------------------------------------------------------------- ##
+declare DEPLOY_CHANGELOG
+declare DEPLOY_DESCRIPTION
+declare DEPLOY_REVISION
+
+declare ENVIRONMENT_CONFIG="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.conf"
+declare ENVIRONMENT_SERVERS="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.servers"
+declare ENVIRONMENT_OVERLAY="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.overlay"
 
 declare ENVIRONMENT_CURRENT="${ROOT_DIRECTORY}/var/${ENVIRONMENT}"
 declare ENVIRONMENT_NEWEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.newest"
@@ -108,11 +200,11 @@ declare ENVIRONMENT_OLDEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.oldest"
 declare DEPLOY_LOG_FILE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}.log"
 declare DEPLOY_LOCK_FILE="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.lock"
 
-declare APPLICATION_NAME=$(_conf_get Name)
 declare APPLICATION_DIRECTORY=$(_conf_get Directory)
-declare APPLICATION_REPOSITORY=$(_conf_get Repository)
-declare APPLICATION_OWNER=$(_conf_get FileSystemOwner)
 declare APPLICATION_GROUP=$(_conf_get FileSystemGroup)
+declare APPLICATION_NAME=$(_conf_get Name)
+declare APPLICATION_OWNER=$(_conf_get FileSystemOwner)
+declare APPLICATION_REPOSITORY=$(_conf_get Repository)
 
 if [ ! -f "${ENVIRONMENT_CONFIG}" ]; then
     _echo "<31>Unable to find configuration file ${ENVIRONMENT_CONFIG}" 1>&2
@@ -251,19 +343,19 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     cd "${OLDPWD}"
     cd "${ENVIRONMENT_CURRENT}"
 
-    test -f "${ROOT_DIRECTORY}/etc/default.hooks/build-post" &&
-        cp "${ROOT_DIRECTORY}/etc/default.hooks/build-post" "env-build-post.hook"
-    test -f "${ROOT_DIRECTORY}/etc/default.hooks/deploy-pre" &&
-        cp "${ROOT_DIRECTORY}/etc/default.hooks/deploy-pre" "env-deploy-pre.hook"
-    test -f "${ROOT_DIRECTORY}/etc/default.hooks/deploy-post" &&
-        cp "${ROOT_DIRECTORY}/etc/default.hooks/deploy-post" "env-deploy-post.hook"
+    test -f "${SETTINGS_DIRECTORY}/default.hooks/build-post" &&
+        cp "${SETTINGS_DIRECTORY}/default.hooks/build-post" "env-build-post.hook"
+    test -f "${SETTINGS_DIRECTORY}/default.hooks/deploy-pre" &&
+        cp "${SETTINGS_DIRECTORY}/default.hooks/deploy-pre" "env-deploy-pre.hook"
+    test -f "${SETTINGS_DIRECTORY}/default.hooks/deploy-post" &&
+        cp "${SETTINGS_DIRECTORY}/default.hooks/deploy-post" "env-deploy-post.hook"
 
-    test -f "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/build-post" &&
-        cp "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/build-post" "env-build-post.hook"
-    test -f "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-pre" &&
-        cp "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-pre" "env-deploy-pre.hook"
-    test -f "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-post" &&
-        cp "${ROOT_DIRECTORY}/etc/${ENVIRONMENT}.hooks/deploy-post" "env-deploy-post.hook"
+    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/build-post" &&
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/build-post" "env-build-post.hook"
+    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-pre" &&
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-pre" "env-deploy-pre.hook"
+    test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-post" &&
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/deploy-post" "env-deploy-post.hook"
 
     _echo "* Applying overlays"
     export LC_ALL=C
