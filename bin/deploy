@@ -7,6 +7,7 @@
 #   --tree-ish, -i  Tree-Ish (branch or tag)
 #   --type, -t      Type of deploy ("upgrade" or "rollback")
 #   --verbose, -v   Enable verbose mode
+#   --yes, -y       Performs the deployment without asking
 #
 # Report bugs to Henrique Moody <henriquemoody@gmail.com>
 #
@@ -23,11 +24,12 @@ declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoa
 declare -r LOCAL_ADDRESS=$(hostname)
 declare -r TIMESTAMP=$(date '+%s')
 
-declare SSH_CONNECTION_TIMEOUT=5
 declare DEPLOY_TYPE="upgrade"
-declare VERBOSE=""
 declare ENVIRONMENT="live"
+declare SSH_CONNECTION_TIMEOUT=5
 declare TREE_ISH="master"
+declare VERBOSE=""
+declare YES=0
 
 ## -------------------------------------------------------------------------- ##
 source "${ROOT_DIRECTORY}/src/check/access.bash"
@@ -54,6 +56,11 @@ while [[ "${1}" = -* ]]; do
 
         --verbose | -v)
             VERBOSE="v"
+            shift 1
+        ;;
+
+        --yes | -y)
+            YES=1
             shift 1
         ;;
 
@@ -92,6 +99,11 @@ done
 
 ## -------------------------------------------------------------------------- ##
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
+    if [ ! -t 1 ]; then
+        _echo "You do not have configuration file, please run it in an interactive shell first" 1>&2
+        exit 2
+    fi
+
     _echo -n "First time running this script? Choose the directory where I will find the configurations files: \n> "
     read -e SETTINGS_DIRECTORY
     if [[ ! -d "${SETTINGS_DIRECTORY}" ]]; then
@@ -211,15 +223,17 @@ if [ ! -f "${ENVIRONMENT_CONFIG}" ]; then
     exit 2
 fi
 
-if [ -t 1 ]; then
+if [[ ${YES} -eq 1 ]]; then
+    answer='YES'
+elif [ -t 1 ]; then
     _echo -n "Are you sure that you want to deploy <32>${DEPLOY_TYPE}<0>"
     if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         _echo -n " from <32>${TREE_ISH}<0>"
     fi
     _echo -n " on <32>${ENVIRONMENT}<0> environment? [y/N]: "
     read answer
-else
-    _echo "You can not run \`${SCRIPT_NAME}\` in non-interactive mode."
+elif [[ ${YES} -eq 0 ]]; then
+    _echo "You can not run \`${SCRIPT_NAME}\` in non-interactive mode or pass '--yes/-y' option."
     exit 3
 fi
 
