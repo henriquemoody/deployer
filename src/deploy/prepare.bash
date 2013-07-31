@@ -58,13 +58,13 @@ fi
 EOF
     else
         ssh "root@${server_address}" <<EOF
-test ! -d "${APPLICATION_DIRECTORY}.oldest" &&
-    echo "Unable to find ${APPLICATION_DIRECTORY}.oldest" &&
-    exit 1
-
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
+
+test ! -d "${APPLICATION_DIRECTORY}.oldest" &&
+    echo "Unable to find ${APPLICATION_DIRECTORY}.oldest" &&
+    exit 1
 
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.backup" "${APPLICATION_DIRECTORY}"

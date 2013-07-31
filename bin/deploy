@@ -82,7 +82,7 @@ while [[ "${1}" = -* ]]; do
         --type | -t)
             if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
                 _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info."
-                exit 9
+                exit 1
             fi
 
             DEPLOY_TYPE="${2}"
@@ -91,7 +91,7 @@ while [[ "${1}" = -* ]]; do
 
         -*)
             _echo "<31>Unrecognized option '${1}'. Run '--help' for more info."
-            exit 23
+            exit 2
         ;;
 
     esac
@@ -101,18 +101,18 @@ done
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     if [ ! -t 1 ]; then
         _echo "You do not have configuration file, please run it in an interactive shell first" 1>&2
-        exit 2
+        exit 3
     fi
 
     _echo -n "First time running this script? Choose the directory where I will find the configurations files: \n> "
     read -e SETTINGS_DIRECTORY
     if [[ ! -d "${SETTINGS_DIRECTORY}" ]]; then
         _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid directory." 1>&2
-        exit 98
+        exit 4
     fi
     if [[ ! -w "${SETTINGS_DIRECTORY}" ]]; then
         _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable." 1>&2
-        exit 99
+        exit 5
     fi
     cp -r "${ROOT_DIRECTORY}/etc/"* "${SETTINGS_DIRECTORY}/"
     rm -f "${SETTINGS_DIRECTORY}/default.conf"
@@ -124,26 +124,26 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     read InputName
     test -z "${InputName}" &&
         _echo "Application's name can not be empty" 1>&2 &&
-        exit 107
+        exit 6
 
     _echo -n "Remote application's directory: "
     read InputDirectory
     test -z "${InputDirectory}" &&
         _echo "Application's remote directory can not be empty" 1>&2 &&
-        exit 107
+        exit 7
 
     _echo -n "Application's GIT repository: "
     read InputRepository
     test -z "${InputRepository}" &&
         _echo "Application's GIT repository can not be empty" 1>&2 &&
-        exit 107
+        exit 8
     if [[ -d "${APPLICATION_SOURCE}" ]]; then
         rm -rf "${APPLICATION_SOURCE}"
     fi
     git clone --quiet "${InputRepository}" "${APPLICATION_SOURCE}"
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Unable to clone GIT repository" 1>&2
-        exit 107
+        exit 9
     fi
 
     _echo -n "File system owner (default \"www-data\"): "
@@ -155,7 +155,7 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     id "${InputFileSystemOwner}" 1> /dev/null 2>&1
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>User ${InputFileSystemOwner} does not exists" 1>&2 &&
-        exit 108
+        exit 10
     fi
 
     _echo -n "File system group (default \"www-data\"): "
@@ -220,7 +220,7 @@ declare APPLICATION_REPOSITORY=$(_conf_get Repository)
 
 if [ ! -f "${ENVIRONMENT_CONFIG}" ]; then
     _echo "<31>Unable to find configuration file ${ENVIRONMENT_CONFIG}" 1>&2
-    exit 2
+    exit 11
 fi
 
 if [[ ${YES} -eq 1 ]]; then
@@ -234,16 +234,16 @@ elif [ -t 1 ]; then
     read answer
 elif [[ ${YES} -eq 0 ]]; then
     _echo "You can not run \`${SCRIPT_NAME}\` in non-interactive mode or pass '--yes/-y' option."
-    exit 3
+    exit 12
 fi
 
 parsed_answer=$(echo ${answer} | tr '[:lower:]' '[:upper:]')
 if [[ "${parsed_answer}" != 'Y' ]] && [[ "${parsed_answer}" != 'YES' ]]; then
     _echo "<31>Deploy aborted<0>"
-    exit 7
+    exit 13
 elif [ -f "${DEPLOY_LOCK_FILE}" ]; then
     _echo "<31>A deploy on this environment is already running. Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>"
-    exit 7
+    exit 14
 fi
 
 _lock_create
@@ -289,7 +289,7 @@ done
 test ${IS_ALLOWED} -eq 0 &&
     _echo "Please, check your SSH key or server availability and try again later." 1>&2 &&
     _lock_remove &&
-    exit 13
+    exit 15
 
 ## -------------------------------------------------------------------------- ##
 
@@ -323,7 +323,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Failure creating new code<0>"
         _lock_remove
-        exit 92
+        exit 16
     fi
 
     GIT_LOG=$(git log -n1 --format='format:%h|%aN <%ae>|%s' "${TREE_ISH}")
@@ -397,7 +397,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
             _echo "An error occurred running \`local-pre-default.hook\`." &&
                 _lock_remove &&
                 cat "${OUTPUT_FILE}" &&
-                exit 120
+                exit 17
         fi
     fi
 
@@ -407,7 +407,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
             _echo "An error occurred running \`local-pre-env.hook\`." &&
                 _lock_remove &&
                 cat "${OUTPUT_FILE}" &&
-                exit 121
+                exit 18
         fi
     fi
 
@@ -451,7 +451,7 @@ done
 test ${IS_SYNCED} -eq 0 &&
     _echo "An error occurred when syncing servers. Please check with the administrator." &&
     _lock_remove &&
-    exit 14
+    exit 19
 
 DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} was successful done."
 
@@ -499,7 +499,7 @@ done
 test ${IS_DEPLOYED} -eq 0 &&
     _echo "An error occurred when deploying to servers. Please check with the administrator." &&
     _lock_remove &&
-    exit 14
+    exit 20
 
 ## -------------------------------------------------------------------------- ##
 _echo "\n<33>Cleaning code on servers<0>"
