@@ -11,8 +11,8 @@ if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
 
-mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")"
-chown "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
+sudo mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")"
+sudo chown "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
 
 if [[ ! -d "${APPLICATION_DIRECTORY}.current" ]]; then
     sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" mkdir -p${VERBOSE} "${APPLICATION_DIRECTORY}.current"
