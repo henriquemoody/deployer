@@ -2,8 +2,9 @@ _deploy_finish()
 {
     local server_name="${1}"
     local server_address="${2}"
+    local server_log_filename="${DEPLOY_LOG_BASE}-${server_name}.log"
 
-    ssh -q "root@${server_address}" <<EOF
+    _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
 
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
