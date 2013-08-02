@@ -348,14 +348,17 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     ## ---------------------------------------------------------------------- ##
     _echo "\n<33>Preparing application code<0>"
 
+    _echo "* Checking superuser privileges"
+    sudo echo > /dev/null
+
     _echo "* Creating new code"
-    mkdir -p "${ENVIRONMENT_NEWEST}"
+    sudo mkdir -p "${ENVIRONMENT_NEWEST}"
 
     git tag -l | egrep -q "^${GIT_TREE_ISH}$"
     if [[ ${?} -gt 0 ]]; then
         GIT_TREE_ISH="${GIT_REMOTE}/${GIT_TREE_ISH}"
     fi
-    git archive "${GIT_TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
+    git archive "${GIT_TREE_ISH}" | sudo tar -x -C "${ENVIRONMENT_NEWEST}"
 
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Failure creating new code<0>" 1>&2
@@ -374,39 +377,47 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     REV_CONTENT="${REV_CONTENT}Author:    ${GIT_LOG_AUTHOR}\n"
     REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
     REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
+    sudo touch "${ENVIRONMENT_NEWEST}/rev.txt"
+    sudo chown "${DEPLOY_USER}" "${ENVIRONMENT_NEWEST}/rev.txt"
     _echo "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
-
-    chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" .
 
     if [ -d "${ENVIRONMENT_OLDEST}" ]; then
         _echo "* Removing old code"
-        rm -rf "${ENVIRONMENT_OLDEST}"
+        sudo rm -rf "${ENVIRONMENT_OLDEST}"
     fi
 
     if [ -d "${ENVIRONMENT_CURRENT}" ]; then
         _echo "* Creating backup of current code"
-        mv "${ENVIRONMENT_CURRENT}" "${ENVIRONMENT_OLDEST}"
+        sudo mv "${ENVIRONMENT_CURRENT}" "${ENVIRONMENT_OLDEST}"
     fi
 
     _echo "* Replacing current code with the new code"
-    mv "${ENVIRONMENT_NEWEST}" "${ENVIRONMENT_CURRENT}"
+    sudo mv "${ENVIRONMENT_NEWEST}" "${ENVIRONMENT_CURRENT}"
 
     cd "${OLDPWD}"
     cd "${ENVIRONMENT_CURRENT}"
 
     test -f "${SETTINGS_DIRECTORY}/default.hooks/local-pre" &&
-        cp "${SETTINGS_DIRECTORY}/default.hooks/local-pre" "local-pre-default.hook"
+        sudo cp "${SETTINGS_DIRECTORY}/default.hooks/local-pre" "${ENVIRONMENT_CURRENT}/local-pre-default.hook"
     test -f "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" &&
-        cp "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" "remote-pre-default.hook"
+        sudo cp "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" "${ENVIRONMENT_CURRENT}/remote-pre-default.hook"
     test -f "${SETTINGS_DIRECTORY}/default.hooks/remote-post" &&
-        cp "${SETTINGS_DIRECTORY}/default.hooks/remote-post" "remote-post-default.hook"
+        sudo cp "${SETTINGS_DIRECTORY}/default.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-default.hook"
 
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" &&
-        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" "local-pre-env.hook"
+        sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" "${ENVIRONMENT_CURRENT}/local-pre-env.hook"
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" &&
-        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" "remote-pre-env.hook"
+        sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" "${ENVIRONMENT_CURRENT}/remote-pre-env.hook"
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" &&
-        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "remote-post-env.hook"
+        sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-env.hook"
+
+    _echo "* Defining file system owner and group"
+    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" >> "${DEPLOY_LOG_FILE}" 2>&1
+    if [[ ${?} -gt 0 ]]; then
+        _echo '<31>Failure when defining file system owner and group<0>' 1>&2
+        tail "${DEPLOY_LOG_FILE}"
+        exit 21
+    fi
 
     _echo "* Applying overlays"
     export LC_ALL=C
@@ -419,33 +430,35 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
             patterns=$(echo "${line}" | cut -d : -f 3)
             IFS='|'
             for pattern in ${patterns}; do
-                find . -name "${pattern}" -print0 | xargs -0 sed -i "s:${variable}:${value}:g"
+                find . -name "${pattern}" -print0 | sudo xargs -0 sed -i "s:${variable}:${value}:g"
             done
             IFS=' '
         done
 
-    _echo "* Running build post hooks"
-
-    OUTPUT_FILE="/tmp/${$}.log"
+    _echo "* Running pre hooks"
 
     if [ -f "local-pre-default.hook" ]; then
-        sh "local-pre-default.hook" > "${OUTPUT_FILE}" 2>&1
+        _echo "Running local-pre-default.hook" >> "${DEPLOY_LOG_FILE}"
+        sh "local-pre-default.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
             _lock_remove
-            cat "${OUTPUT_FILE}"
+            tail "${DEPLOY_LOG_FILE}"
             exit 17
         fi
+        _echo "Finished local-pre-default.hook" >> "${DEPLOY_LOG_FILE}"
     fi
 
     if [ -f "local-pre-env.hook" ]; then
-        sh "local-pre-env.hook" > "${OUTPUT_FILE}" 2>&1
+        _echo "Running local-pre-env.hook" >> "${DEPLOY_LOG_FILE}"
+        sh "local-pre-env.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
             _lock_remove
-            cat "${OUTPUT_FILE}"
+            tail "${DEPLOY_LOG_FILE}"
             exit 18
         fi
+        _echo "Finished local-pre-env.hook" >> "${DEPLOY_LOG_FILE}"
     fi
 
     cd "${OLDPWD}"
