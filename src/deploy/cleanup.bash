@@ -5,7 +5,10 @@ _deploy_cleanup()
     local server_log_filename="${DEPLOY_LOG_BASE}-${server_name}.log"
 
     _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
-rm -rf "${APPLICATION_DIRECTORY}.backup"
+if [[ -d "${APPLICATION_DIRECTORY}.backup" ]]; then
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+        rm -rf "${APPLICATION_DIRECTORY}.backup"
+fi
 EOF
 
     code=${?}

@@ -11,30 +11,53 @@ if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
 
-sudo mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")"
-sudo chown "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
+if [[ ! -d "${APPLICATION_DIRECTORY}" ]]; then
+    sudo mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")" &&
+        sudo chown -R${VERBOSE} "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
 
-if [[ ! -d "${APPLICATION_DIRECTORY}.current" ]]; then
-    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" mkdir -p${VERBOSE} "${APPLICATION_DIRECTORY}.current"
-    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
-    rsync -arzO${VERBOSE} -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" "${APPLICATION_DIRECTORY}.current"
+    test ${?} -gt 0 &&
+        echo "Failure creating base directory" &&
+        exit 1
 fi
 
-cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest" &&
-    rsync -arzO${VERBOSE} --delete -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" "${APPLICATION_DIRECTORY}.newest"
+if [[ ! -d "${APPLICATION_DIRECTORY}.current" ]]; then
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+        mkdir -p${VERBOSE} "${APPLICATION_DIRECTORY}.current"
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+        ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+        rsync \
+            -arzO${VERBOSE} \
+            -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' \
+            "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" \
+            "${APPLICATION_DIRECTORY}.current"
+fi
+
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest" &&
+    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+        rsync \
+            -arzO${VERBOSE} \
+            --delete \
+            -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' \
+            "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" \
+            "${APPLICATION_DIRECTORY}.newest"
 
 test ${?} -gt 0 &&
-    echo  "Failure when copying new code" &&
+    echo "Failure when copying new code" &&
     exit 1
 
-chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${APPLICATION_DIRECTORY}.newest"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    ln -sfn "${APPLICATION_DIRECTORY}.backup" "${APPLICATION_DIRECTORY}"
 
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.backup" "${APPLICATION_DIRECTORY}"
-
-rm -rf "${APPLICATION_DIRECTORY}.oldest"
-mv "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.oldest"
-mv "${APPLICATION_DIRECTORY}.newest" "${APPLICATION_DIRECTORY}.current"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    rm -rf "${APPLICATION_DIRECTORY}.oldest"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    mv "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.oldest"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    mv "${APPLICATION_DIRECTORY}.newest" "${APPLICATION_DIRECTORY}.current"
 
 cd "${APPLICATION_DIRECTORY}.current"
 
@@ -67,11 +90,15 @@ test ! -d "${APPLICATION_DIRECTORY}.oldest" &&
     echo "Unable to find ${APPLICATION_DIRECTORY}.oldest" &&
     exit 1
 
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.backup" "${APPLICATION_DIRECTORY}"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    ln -sfn "${APPLICATION_DIRECTORY}.backup" "${APPLICATION_DIRECTORY}"
 
-mv "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest"
-mv "${APPLICATION_DIRECTORY}.oldest" "${APPLICATION_DIRECTORY}.current"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    mv "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    mv "${APPLICATION_DIRECTORY}.oldest" "${APPLICATION_DIRECTORY}.current"
 EOF
     fi
 

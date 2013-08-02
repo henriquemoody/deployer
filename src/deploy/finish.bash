@@ -10,7 +10,8 @@ if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
 
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
 
 cd "${APPLICATION_DIRECTORY}.current"
 
