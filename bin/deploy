@@ -77,7 +77,7 @@ while [[ "${1}" = -* ]]; do
 
         --type | -t)
             if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
-                _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info."
+                _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>" 1>&2
                 exit 1
             fi
 
@@ -96,7 +96,7 @@ while [[ "${1}" = -* ]]; do
         ;;
 
         -*)
-            _echo "<31>Unrecognized option '${1}'. Run '--help' for more info."
+            _echo "<31>Unrecognized option '${1}'. Run '--help' for more info.<0>" 1>&2
             exit 2
         ;;
 
@@ -106,18 +106,18 @@ done
 ## -------------------------------------------------------------------------- ##
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     if [ ! -t 1 ]; then
-        _echo "You do not have configuration file, please run it in an interactive shell first" 1>&2
+        _echo "<31>You do not have configuration file, please run it in an interactive shell first.<0>" 1>&2
         exit 3
     fi
 
     _echo -n "First time running this script? Choose the directory where I will find the configurations files: \n> "
     read -e SETTINGS_DIRECTORY
     if [[ ! -d "${SETTINGS_DIRECTORY}" ]]; then
-        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid directory." 1>&2
+        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid directory.<0>" 1>&2
         exit 4
     fi
     if [[ ! -w "${SETTINGS_DIRECTORY}" ]]; then
-        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable." 1>&2
+        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable.<0>" 1>&2
         exit 5
     fi
     cp -r "${ROOT_DIRECTORY}/etc/"* "${SETTINGS_DIRECTORY}/"
@@ -129,26 +129,27 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     _echo -n "Application's name: "
     read InputName
     test -z "${InputName}" &&
-        _echo "Application's name can not be empty" 1>&2 &&
+        _echo "<31>Application's name can not be empty<0>" 1>&2 &&
         exit 6
 
     _echo -n "Remote application's directory: "
     read InputDirectory
     test -z "${InputDirectory}" &&
-        _echo "Application's remote directory can not be empty" 1>&2 &&
+        _echo "<31>Application's remote directory can not be empty<0>" 1>&2 &&
         exit 7
 
     _echo -n "Application's GIT repository: "
     read InputRepository
     test -z "${InputRepository}" &&
-        _echo "Application's GIT repository can not be empty" 1>&2 &&
+        _echo "<31>Application's GIT repository can not be empty<0>" 1>&2 &&
         exit 8
+
     if [[ -d "${APPLICATION_SOURCE}" ]]; then
         rm -rf "${APPLICATION_SOURCE}"
     fi
     git clone --quiet "${InputRepository}" "${APPLICATION_SOURCE}"
     if [[ ${?} -gt 0 ]]; then
-        _echo "<31>Unable to clone GIT repository" 1>&2
+        _echo "<31>Unable to clone GIT repository<0>" 1>&2
         exit 9
     fi
 
@@ -158,9 +159,9 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
        InputFileSystemOwner="www-data"
     fi
 
-    id "${InputFileSystemOwner}" 1> /dev/null 2>&1
+    id "${InputFileSystemOwner}" > /dev/null 2>&1
     if [[ ${?} -gt 0 ]]; then
-        _echo "<31>User ${InputFileSystemOwner} does not exists" 1>&2 &&
+        _echo "<31>User ${InputFileSystemOwner} does not exists<0>" 1>&2
         exit 10
     fi
 
@@ -224,10 +225,6 @@ else
 fi
 
 ## -------------------------------------------------------------------------- ##
-_echo "<32;4>Deployer<0>"
-_echo "<36>Deploying <36;1>$(_conf_get "Name" "${APPLICATION_CONFIG}")<0><36> as <36;1>${DEPLOY_USER}<0>\n"
-
-## -------------------------------------------------------------------------- ##
 declare DEPLOY_CHANGELOG
 declare DEPLOY_DESCRIPTION
 declare DEPLOY_REVISION
@@ -255,10 +252,11 @@ declare APPLICATION_NAME=$(_conf_get Name)
 declare APPLICATION_OWNER=$(_conf_get FileSystemOwner)
 declare APPLICATION_REPOSITORY=$(_conf_get Repository)
 
-if [ ! -f "${ENVIRONMENT_CONFIG}" ]; then
-    _echo "<31>Unable to find configuration file ${ENVIRONMENT_CONFIG}" 1>&2
-    exit 11
-fi
+## -------------------------------------------------------------------------- ##
+_echo "<32;4>Deployer<0>"
+_echo "<36>Deploying <36;1>${APPLICATION_NAME}<0><36> as <36;1>${DEPLOY_USER}<0>"
+_echo
+## -------------------------------------------------------------------------- ##
 
 if [[ ${YES} -eq 1 ]]; then
     answer='YES'
@@ -270,16 +268,18 @@ elif [ -t 1 ]; then
     _echo -n " on <32>${ENVIRONMENT}<0> environment? [y/N]: "
     read answer
 elif [[ ${YES} -eq 0 ]]; then
-    _echo "You can not run \`${SCRIPT_NAME}\` in non-interactive mode or pass '--yes/-y' option."
+    _echo "<31>You can not run \`${SCRIPT_NAME}\` in non-interactive mode or pass '--yes/-y' option.<0>" 1>&2
     exit 12
 fi
 
 parsed_answer=$(echo ${answer} | tr '[:lower:]' '[:upper:]')
 if [[ "${parsed_answer}" != 'Y' ]] && [[ "${parsed_answer}" != 'YES' ]]; then
-    _echo "<31>Deploy aborted<0>"
+    _echo "<31>Deploy aborted<0>" 1>&2
     exit 13
 elif [ -f "${DEPLOY_LOCK_FILE}" ]; then
-    _echo "<31>A deploy on this environment is already running. Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>"
+    _echo \
+        "<31>A deploy on this environment is already running.<0>" \
+        "<31>Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>" 1>&2
     exit 14
 fi
 
@@ -324,7 +324,7 @@ for PID in ${PIDS}; do
 done
 
 test ${IS_ALLOWED} -eq 0 &&
-    _echo "Please, check your SSH key or server availability and try again later." 1>&2 &&
+    _echo "<31>Please, check your SSH key or server availability and try again later.<0>" 1>&2 &&
     _lock_remove &&
     exit 15
 
@@ -358,7 +358,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     git archive "${GIT_TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
 
     if [[ ${?} -gt 0 ]]; then
-        _echo "<31>Failure creating new code<0>"
+        _echo "<31>Failure creating new code<0>" 1>&2
         _lock_remove
         exit 16
     fi
@@ -431,20 +431,20 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     if [ -f "local-pre-default.hook" ]; then
         sh "local-pre-default.hook" > "${OUTPUT_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
-            _echo "An error occurred running \`local-pre-default.hook\`." &&
-                _lock_remove &&
-                cat "${OUTPUT_FILE}" &&
-                exit 17
+            _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
+            _lock_remove
+            cat "${OUTPUT_FILE}"
+            exit 17
         fi
     fi
 
     if [ -f "local-pre-env.hook" ]; then
         sh "local-pre-env.hook" > "${OUTPUT_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
-            _echo "An error occurred running \`local-pre-env.hook\`." &&
-                _lock_remove &&
-                cat "${OUTPUT_FILE}" &&
-                exit 18
+            _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
+            _lock_remove
+            cat "${OUTPUT_FILE}"
+            exit 18
         fi
     fi
 
@@ -486,7 +486,7 @@ for PID in ${PIDS}; do
 done
 
 test ${IS_SYNCED} -eq 0 &&
-    _echo "An error occurred when syncing servers. Please check with the administrator." &&
+    _echo "<31>An error occurred when syncing servers. Please check with the administrator.<0>" 1>&2 &&
     _lock_remove &&
     exit 19
 
@@ -534,7 +534,7 @@ for PID in ${PIDS}; do
 done
 
 test ${IS_DEPLOYED} -eq 0 &&
-    _echo "An error occurred when deploying to servers. Please check with the administrator." &&
+    _echo "<31>An error occurred when deploying to servers. Please check with the administrator.<0>" 1>&2 &&
     _lock_remove &&
     exit 20
 
