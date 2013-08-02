@@ -3,8 +3,9 @@
 #
 #   --help, -h      Displays this help
 #   --env, -e       Environment to deploy
+#   --remote, -r    Git remote name (default "origin")
 #   --timeout, -m   SSH connection checking timeout
-#   --tree-ish, -i  Tree-Ish (branch or tag)
+#   --tree-ish, -i  Tree-Ish (branch or tag name, default "master")
 #   --type, -t      Type of deploy ("upgrade" or "rollback")
 #   --verbose, -v   Enable verbose mode
 #   --yes, -y       Performs the deployment without asking
@@ -26,8 +27,9 @@ declare -r TIMESTAMP=$(date '+%s')
 
 declare DEPLOY_TYPE="upgrade"
 declare ENVIRONMENT="live"
+declare GIT_REMOTE="origin"
+declare GIT_TREE_ISH="master"
 declare SSH_CONNECTION_TIMEOUT=5
-declare TREE_ISH="master"
 declare VERBOSE=""
 declare YES=0
 
@@ -74,8 +76,13 @@ while [[ "${1}" = -* ]]; do
             shift 2
         ;;
 
+        --remote | -r)
+            GIT_REMOTE="${2}"
+            shift 2
+        ;;
+
         --tree-ish | -i)
-            TREE_ISH="${2}"
+            GIT_TREE_ISH="${2}"
             shift 2
         ;;
 
@@ -228,7 +235,7 @@ if [[ ${YES} -eq 1 ]]; then
 elif [ -t 1 ]; then
     _echo -n "Are you sure that you want to deploy <32>${DEPLOY_TYPE}<0>"
     if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
-        _echo -n " from <32>${TREE_ISH}<0>"
+        _echo -n " from <32>${GIT_TREE_ISH}<0>"
     fi
     _echo -n " on <32>${ENVIRONMENT}<0> environment? [y/N]: "
     read answer
@@ -248,13 +255,13 @@ fi
 
 _lock_create
 
-DEPLOY_DESCRIPTION="Deploy ${DEPLOY_TYPE} of ${TREE_ISH} on ${ENVIRONMENT}"
+DEPLOY_DESCRIPTION="Deploy ${DEPLOY_TYPE} of ${GIT_TREE_ISH} on ${ENVIRONMENT}"
 
 _echo
 
 _echo -n "<32>Deploying \"${DEPLOY_TYPE}\"<0>"
 if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
-    _echo -n "<32> from \"${TREE_ISH}\"<0>"
+    _echo -n "<32> from \"${GIT_TREE_ISH}\"<0>"
 fi
 _echo "<32> on \"${ENVIRONMENT}\" environment<0>"
 
@@ -301,7 +308,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         git clone "${APPLICATION_REPOSITORY}" "${APPLICATION_SOURCE}"
     fi
     cd "${APPLICATION_SOURCE}"
-    git fetch origin
+    git fetch "${GIT_REMOTE}"
 
     if [ -d "${ENVIRONMENT_NEWEST}" ]; then
         _echo "\n<33>Removing trash of some older deploy<0>"
@@ -314,11 +321,11 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     _echo "* Creating new code"
     mkdir -p "${ENVIRONMENT_NEWEST}"
 
-    git tag -l | egrep -q "^${TREE_ISH}$"
+    git tag -l | egrep -q "^${GIT_TREE_ISH}$"
     if [[ ${?} -gt 0 ]]; then
-        TREE_ISH="origin/${TREE_ISH}"
+        GIT_TREE_ISH="${GIT_REMOTE}/${GIT_TREE_ISH}"
     fi
-    git archive "${TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
+    git archive "${GIT_TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
 
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Failure creating new code<0>"
@@ -326,14 +333,14 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         exit 16
     fi
 
-    GIT_LOG=$(git log -n1 --format='format:%h|%aN <%ae>|%s' "${TREE_ISH}")
+    GIT_LOG=$(git log -n1 --format='format:%h|%aN <%ae>|%s' "${GIT_TREE_ISH}")
     GIT_LOG_HASH=$(echo "${GIT_LOG}" | cut -d '|' -f 1)
     GIT_LOG_AUTHOR=$(echo "${GIT_LOG}" | cut -d '|' -f 2)
     GIT_LOG_SUBJECT=$(echo "${GIT_LOG}" | cut -d '|' -f 3-)
 
     REV_CONTENT="Timestamp: ${TIMESTAMP}\n"
     REV_CONTENT="${REV_CONTENT}Date-Time: ${DATETIME}\n"
-    REV_CONTENT="${REV_CONTENT}Tree-Ish:  ${TREE_ISH}\n"
+    REV_CONTENT="${REV_CONTENT}Tree-Ish:  ${GIT_TREE_ISH}\n"
     REV_CONTENT="${REV_CONTENT}Author:    ${GIT_LOG_AUTHOR}\n"
     REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
     REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
@@ -522,7 +529,7 @@ _echo "* Application:   ${APPLICATION_NAME}"
 _echo "* Environment:   ${ENVIRONMENT}"
 _echo "* Started at:    ${DATETIME}"
 _echo "* Finished at:   $(date '+%Y-%m-%d %H:%M:%S')"
-_echo "* Tree-Ish:      ${TREE_ISH}"
+_echo "* Tree-Ish:      ${GIT_TREE_ISH}"
 _echo "* Type:          ${DEPLOY_TYPE}"
 
 _lock_remove
