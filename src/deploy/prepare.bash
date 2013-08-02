@@ -2,9 +2,10 @@ _deploy_prepare()
 {
     local server_name="${1}"
     local server_address="${2}"
+    local server_log_filename="${DEPLOY_LOG_BASE}-${server_name}.log"
 
     if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
-        ssh "root@${server_address}" <<EOF
+        _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
 
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
@@ -57,7 +58,7 @@ fi
 
 EOF
     else
-        ssh "root@${server_address}" <<EOF
+        _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
@@ -77,7 +78,7 @@ EOF
     code=${?}
 
     if [[ ${code} -gt 0 ]]; then
-        _echo "<31>Failure when syncing server ${server_name} (${server_address})<0>"
+        _echo "<31>Failure when syncing server ${server_name} (${server_address})<0>" 1>&2
     else
         _echo "<32>Success on syncing server ${server_name} (${server_address})<0>"
     fi

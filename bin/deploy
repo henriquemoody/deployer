@@ -4,7 +4,6 @@
 #   --help, -h      Displays this help
 #   --env, -e       Environment to deploy
 #   --remote, -r    Git remote name (default "origin")
-#   --timeout, -m   SSH connection checking timeout
 #   --tree-ish, -i  Tree-Ish (branch or tag name, default "master")
 #   --type, -t      Type of deploy ("upgrade" or "rollback")
 #   --verbose, -v   Enable verbose mode
@@ -29,7 +28,6 @@ declare DEPLOY_TYPE="upgrade"
 declare ENVIRONMENT="live"
 declare GIT_REMOTE="origin"
 declare GIT_TREE_ISH="master"
-declare SSH_CONNECTION_TIMEOUT=5
 declare VERBOSE=""
 declare YES=0
 
@@ -44,6 +42,7 @@ source "${ROOT_DIRECTORY}/src/echo.bash"
 source "${ROOT_DIRECTORY}/src/help.bash"
 source "${ROOT_DIRECTORY}/src/lock/create.bash"
 source "${ROOT_DIRECTORY}/src/lock/remove.bash"
+source "${ROOT_DIRECTORY}/src/ssh.bash"
 
 ## -------------------------------------------------------------------------- ##
 
@@ -56,21 +55,6 @@ while [[ "${1}" = -* ]]; do
             exit 0
         ;;
 
-        --verbose | -v)
-            VERBOSE="v"
-            shift 1
-        ;;
-
-        --yes | -y)
-            YES=1
-            shift 1
-        ;;
-
-        --timeout | -m)
-            SSH_CONNECTION_TIMEOUT="${2}"
-            shift 2
-        ;;
-
         --env | -e)
             ENVIRONMENT="${2}"
             shift 2
@@ -78,6 +62,11 @@ while [[ "${1}" = -* ]]; do
 
         --remote | -r)
             GIT_REMOTE="${2}"
+            shift 2
+        ;;
+
+        --timeout | -m)
+            SSH_CONNECTION_TIMEOUT="${2}"
             shift 2
         ;;
 
@@ -94,6 +83,16 @@ while [[ "${1}" = -* ]]; do
 
             DEPLOY_TYPE="${2}"
             shift 2
+        ;;
+
+        --verbose | -v)
+            VERBOSE="v"
+            shift 1
+        ;;
+
+        --yes | -y)
+            YES=1
+            shift 1
         ;;
 
         -*)
@@ -171,6 +170,27 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
        InputFileSystemGroup="www-data"
     fi
 
+    _echo -n "SSH connection timeout (default \"5\"): "
+    read InputSshConnectionTimeout
+    if [[ -z "${InputSshConnectionTimeout}" ]]; then
+       InputSshConnectionTimeout=5
+    fi
+
+    _echo -n "SSH user (default \"root\"): "
+    read InputSshUser
+    if [[ -z "${InputSshUser}" ]]; then
+       InputSshUser="root"
+    fi
+
+    _echo -n "SSH port (default \"22\"): "
+    read InputSshPort
+    if [[ -z "${InputSshPort}" ]]; then
+       InputSshPort="22"
+    fi
+
+    _echo -n "SSH private key file (will use yours by default): "
+    read -e InputSshPrivateKeyFile
+
     _echo -n "Do you want to enable New Relic notifications? [y/N]: "
     read InputEnableNewRelicNotification
     InputEnableNewRelicNotification=$(echo "${InputEnableNewRelicNotification}" | tr [a-z] [A-Z])
@@ -191,6 +211,10 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     _conf_set "Repository" "${InputRepository}"
     _conf_set "FileSystemOwner" "${InputFileSystemOwner}"
     _conf_set "FileSystemGroup" "${InputFileSystemGroup}"
+    _conf_set "SshConnectionTimeout" "${InputSshConnectionTimeout}"
+    _conf_set "SshUser" "${InputSshUser}"
+    _conf_set "SshPort" "${InputSshPort}"
+    _conf_set "SshPrivateKeyFile" "${InputSshPrivateKeyFile}"
     _conf_set "NewRelicNotification" "${InputNewRelicNotification}"
     _conf_set "NewRelicApiKey" "${InputNewRelicApiKey}"
     _conf_set "NewRelicApplicationId" "${InputNewRelicApplicationId}"
@@ -208,6 +232,11 @@ declare DEPLOY_CHANGELOG
 declare DEPLOY_DESCRIPTION
 declare DEPLOY_REVISION
 
+declare SSH_CONNECTION_TIMEOUT=$(_conf_get "SshConnectionTimeout" "${APPLICATION_CONFIG}")
+declare SSH_USER=$(_conf_get "SshUser" "${APPLICATION_CONFIG}")
+declare SSH_PORT=$(_conf_get "SshPort" "${APPLICATION_CONFIG}")
+declare SSH_PRIVATE_KEY_FILE=$(_conf_get "SshPrivateKeyFile" "${APPLICATION_CONFIG}")
+
 declare ENVIRONMENT_CONFIG="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.conf"
 declare ENVIRONMENT_SERVERS="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.servers"
 declare ENVIRONMENT_OVERLAY="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.overlay"
@@ -216,7 +245,8 @@ declare ENVIRONMENT_CURRENT="${ROOT_DIRECTORY}/var/${ENVIRONMENT}"
 declare ENVIRONMENT_NEWEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.newest"
 declare ENVIRONMENT_OLDEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.oldest"
 
-declare DEPLOY_LOG_FILE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}.log"
+declare DEPLOY_LOG_BASE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
+declare DEPLOY_LOG_FILE="${DEPLOY_LOG_BASE}.log"
 declare DEPLOY_LOCK_FILE="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.lock"
 
 declare APPLICATION_DIRECTORY=$(_conf_get Directory)
@@ -278,7 +308,7 @@ while read line; do
     server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
     server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
 
-    _check_access "${server_name}" "${server_address}" 2>/dev/null &
+    _check_access "${server_name}" "${server_address}" &
     PIDS="${PIDS} ${!}"
 
 done < "${ENVIRONMENT_SERVERS}"
@@ -438,7 +468,7 @@ while read line; do
     server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
     server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
 
-    _deploy_prepare "${server_name}" "${server_address}" 2>> "${DEPLOY_LOG_FILE}" &
+    _deploy_prepare "${server_name}" "${server_address}" &
     PIDS="${PIDS} ${!}"
 
     DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} ${server_name} (${server_address}),"
@@ -488,7 +518,7 @@ while read line; do
     server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
     server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
 
-    _deploy_finish "${server_name}" "${server_address}" 2>> "${DEPLOY_LOG_FILE}" &
+    _deploy_finish "${server_name}" "${server_address}" &
     PIDS="${PIDS} ${!}"
 
 done < "${ENVIRONMENT_SERVERS}"
@@ -517,7 +547,7 @@ while read line; do
     server_name=$(echo "${line}" | cut -d ${DELIMITER} -f 1)
     server_address=$(echo "${line}" | cut -d ${DELIMITER} -f 2)
 
-    _deploy_cleanup "${server_name}" "${server_address}" 2>> "${DEPLOY_LOG_FILE}" &
+    _deploy_cleanup "${server_name}" "${server_address}" &
 
 done < "${ENVIRONMENT_SERVERS}"
 
