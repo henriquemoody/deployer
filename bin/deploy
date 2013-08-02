@@ -3,6 +3,7 @@
 #
 #   --help, -h      Displays this help
 #   --version, -V   Displays the script version
+#   --upgrade, -u   Upgrade deploy script
 # 
 #   --env, -e       Environment to deploy
 #   --remote, -r    Git remote name (default "origin")
@@ -60,6 +61,12 @@ while [[ "${1}" = -* ]]; do
         --version | -V)
             cd "${ROOT_DIRECTORY}"
             git describe
+            exit 0
+        ;;
+
+        --upgrade | -u)
+            cd "${ROOT_DIRECTORY}"
+            git pull
             exit 0
         ;;
 
