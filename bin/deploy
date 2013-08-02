@@ -37,6 +37,7 @@ declare YES=0
 ## -------------------------------------------------------------------------- ##
 source "${ROOT_DIRECTORY}/src/check/access.bash"
 source "${ROOT_DIRECTORY}/src/conf/get.bash"
+source "${ROOT_DIRECTORY}/src/conf/read.bash"
 source "${ROOT_DIRECTORY}/src/conf/set.bash"
 source "${ROOT_DIRECTORY}/src/deploy/cleanup.bash"
 source "${ROOT_DIRECTORY}/src/deploy/finish.bash"
@@ -235,9 +236,9 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     _conf_set "NewRelicApiKey" "${InputNewRelicApiKey}"
     _conf_set "NewRelicApplicationId" "${InputNewRelicApplicationId}"
     _conf_set "SettingsDirectory" "${SETTINGS_DIRECTORY}"
-else
-    SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
 fi
+
+SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
 
 ## -------------------------------------------------------------------------- ##
 declare DEPLOY_CHANGELOG

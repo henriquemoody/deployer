@@ -1,14 +1,12 @@
 _conf_get()
 {
-    local config_filename="${2}";
+    local name="${1}";
+    local filename="${2}";
 
-    if [[ -z "${config_filename}" ]]; then
-        config_filename="${ENVIRONMENT_CONFIG}"
+    if [[ -z "${filename}" ]]; then
+        filename="${ENVIRONMENT_CONFIG}"
     fi
 
-    echo $(grep "${1}" "${config_filename}" || grep "${1}" "${APPLICATION_CONFIG}") |
-        egrep -v '^#' |
-        cut -d ' ' -f 2-
-
-    return ${?}
+    _conf_read "${filename}" "${name}" ||
+        _conf_read "${APPLICATION_CONFIG}" "${name}"
 }
