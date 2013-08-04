@@ -301,6 +301,11 @@ elif [ -f "${DEPLOY_LOCK_FILE}" ]; then
     exit 14
 fi
 
+if [[ ! -f "${ENVIRONMENT_SERVERS}" ]]; then
+    _echo "<31>Unable to find \"${ENVIRONMENT}.servers\" file<0>" 1>&2
+    exit 22
+fi
+
 _lock_create
 
 DEPLOY_DESCRIPTION="Deploy ${DEPLOY_TYPE} of ${GIT_TREE_ISH} on ${ENVIRONMENT}"
@@ -434,6 +439,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     if [[ ${?} -gt 0 ]]; then
         _echo '<31>Failure when defining file system owner and group<0>' 1>&2
         tail "${DEPLOY_LOG_FILE}"
+        _lock_remove
         exit 21
     fi
 
@@ -460,8 +466,8 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         sh "local-pre-default.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
-            _lock_remove
             tail "${DEPLOY_LOG_FILE}"
+            _lock_remove
             exit 17
         fi
         _echo "Finished local-pre-default.hook" >> "${DEPLOY_LOG_FILE}"
@@ -472,8 +478,8 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         sh "local-pre-env.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
-            _lock_remove
             tail "${DEPLOY_LOG_FILE}"
+            _lock_remove
             exit 18
         fi
         _echo "Finished local-pre-env.hook" >> "${DEPLOY_LOG_FILE}"
