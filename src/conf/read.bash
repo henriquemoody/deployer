@@ -13,6 +13,9 @@ _conf_read()
         return 2
     fi
 
-    echo "${content}" | egrep -q "^[A-Za-z]+ .+" &&
-        echo "${content}" | cut -d ' ' -f 2-
+    echo "${content}" |
+        egrep -q "^[A-Za-z]+ .+" &&
+            echo "${content}" |
+                cut -d ' ' -f 2- |
+                sed -E 's/ +$//g'
 }

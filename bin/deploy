@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Usage: {script} [ OPTIONS ]
+# Usage: {script} OPTIONS
 #
 #   --help, -h      Displays this help
 #   --version, -V   Displays the script version
 #   --upgrade, -u   Upgrade deploy script
-# 
+#
 #   --env, -e       Environment to deploy
+#   --config, -c    Displays configuration information
 #   --remote, -r    Git remote name (default "origin")
 #   --tree-ish, -i  Tree-Ish (branch or tag name, default "master")
 #   --type, -t      Type of deploy ("upgrade" or "rollback")
@@ -39,9 +40,12 @@ source "${ROOT_DIRECTORY}/src/check/access.bash"
 source "${ROOT_DIRECTORY}/src/conf/get.bash"
 source "${ROOT_DIRECTORY}/src/conf/read.bash"
 source "${ROOT_DIRECTORY}/src/conf/set.bash"
+source "${ROOT_DIRECTORY}/src/conf/show.bash"
 source "${ROOT_DIRECTORY}/src/deploy/cleanup.bash"
 source "${ROOT_DIRECTORY}/src/deploy/finish.bash"
 source "${ROOT_DIRECTORY}/src/deploy/prepare.bash"
+source "${ROOT_DIRECTORY}/src/deploy/prepare/rollback.bash"
+source "${ROOT_DIRECTORY}/src/deploy/prepare/upgrade.bash"
 source "${ROOT_DIRECTORY}/src/echo.bash"
 source "${ROOT_DIRECTORY}/src/help.bash"
 source "${ROOT_DIRECTORY}/src/lock/create.bash"
@@ -49,8 +53,6 @@ source "${ROOT_DIRECTORY}/src/lock/remove.bash"
 source "${ROOT_DIRECTORY}/src/ssh.bash"
 
 ## -------------------------------------------------------------------------- ##
-
-
 while [[ "${1}" = -* ]]; do
     case "${1}" in
 
@@ -75,47 +77,9 @@ while [[ "${1}" = -* ]]; do
             ENVIRONMENT="${2}"
             shift 2
         ;;
-
-        --remote | -r)
-            GIT_REMOTE="${2}"
-            shift 2
+        *)
+            break
         ;;
-
-        --timeout | -m)
-            SSH_CONNECTION_TIMEOUT="${2}"
-            shift 2
-        ;;
-
-        --tree-ish | -i)
-            GIT_TREE_ISH="${2}"
-            shift 2
-        ;;
-
-        --type | -t)
-            if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
-                _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>" 1>&2
-                exit 1
-            fi
-
-            DEPLOY_TYPE="${2}"
-            shift 2
-        ;;
-
-        --verbose | -v)
-            VERBOSE="v"
-            shift 1
-        ;;
-
-        --yes | -y)
-            YES=1
-            shift 1
-        ;;
-
-        -*)
-            _echo "<31>Unrecognized option '${1}'. Run '--help' for more info.<0>" 1>&2
-            exit 2
-        ;;
-
     esac
 done
 
@@ -238,7 +202,66 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     _conf_set "SettingsDirectory" "${SETTINGS_DIRECTORY}"
 fi
 
-SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
+declare -r SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
+declare -r ENVIRONMENT_CONFIG="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.conf"
+declare -r ENVIRONMENT_SERVERS="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.servers"
+declare -r ENVIRONMENT_OVERLAY="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.overlay"
+
+declare -r ENVIRONMENT_CURRENT="${ROOT_DIRECTORY}/var/${ENVIRONMENT}"
+declare -r ENVIRONMENT_NEWEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.newest"
+declare -r ENVIRONMENT_OLDEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.oldest"
+
+## -------------------------------------------------------------------------- ##
+while [[ "${1}" = -* ]]; do
+    case "${1}" in
+
+        --config | -c)
+            _conf_show
+            exit 0
+        ;;
+
+        --remote | -r)
+            GIT_REMOTE="${2}"
+            shift 2
+        ;;
+
+        --timeout | -m)
+            SSH_CONNECTION_TIMEOUT="${2}"
+            shift 2
+        ;;
+
+        --tree-ish | -i)
+            GIT_TREE_ISH="${2}"
+            shift 2
+        ;;
+
+        --type | -t)
+            if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
+                _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>" 1>&2
+                exit 1
+            fi
+
+            DEPLOY_TYPE="${2}"
+            shift 2
+        ;;
+
+        --verbose | -v)
+            VERBOSE="v"
+            shift 1
+        ;;
+
+        --yes | -y)
+            YES=1
+            shift 1
+        ;;
+
+        -*)
+            _echo "<31>Unrecognized option '${1}'. Run '--help' for more info.<0>" 1>&2
+            exit 2
+        ;;
+
+    esac
+done
 
 ## -------------------------------------------------------------------------- ##
 declare DEPLOY_CHANGELOG
@@ -249,14 +272,12 @@ declare SSH_CONNECTION_TIMEOUT=$(_conf_get "SshConnectionTimeout" "${APPLICATION
 declare SSH_USER=$(_conf_get "SshUser" "${APPLICATION_CONFIG}")
 declare SSH_PORT=$(_conf_get "SshPort" "${APPLICATION_CONFIG}")
 declare SSH_PRIVATE_KEY_FILE=$(_conf_get "SshPrivateKeyFile" "${APPLICATION_CONFIG}")
-
-declare ENVIRONMENT_CONFIG="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.conf"
-declare ENVIRONMENT_SERVERS="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.servers"
-declare ENVIRONMENT_OVERLAY="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.overlay"
-
-declare ENVIRONMENT_CURRENT="${ROOT_DIRECTORY}/var/${ENVIRONMENT}"
-declare ENVIRONMENT_NEWEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.newest"
-declare ENVIRONMENT_OLDEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.oldest"
+declare SSH_OPTIONS=$(test ! -z ${SSH_PRIVATE_KEY_FILE} && echo "-i ${SSH_PRIVATE_KEY_FILE}")
+        SSH_OPTIONS="${SSH_OPTIONS} -o ConnectTimeout=${SSH_CONNECTION_TIMEOUT}"
+        SSH_OPTIONS="${SSH_OPTIONS} -o PasswordAuthentication=no"
+        SSH_OPTIONS="${SSH_OPTIONS} -o StrictHostKeyChecking=no"
+        SSH_OPTIONS="${SSH_OPTIONS} -o UserKnownHostsFile=/dev/null"
+        SSH_OPTIONS="${SSH_OPTIONS} -p ${SSH_PORT}"
 
 declare DEPLOY_LOG_BASE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
 declare DEPLOY_LOG_FILE="${DEPLOY_LOG_BASE}.log"
@@ -297,6 +318,11 @@ elif [ -f "${DEPLOY_LOCK_FILE}" ]; then
         "<31>A deploy on this environment is already running.<0>" \
         "<31>Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>" 1>&2
     exit 14
+fi
+
+if [[ ! -f "${ENVIRONMENT_SERVERS}" ]]; then
+    _echo "<31>Unable to find \"${ENVIRONMENT}.servers\" file<0>" 1>&2
+    exit 22
 fi
 
 _lock_create
@@ -432,6 +458,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     if [[ ${?} -gt 0 ]]; then
         _echo '<31>Failure when defining file system owner and group<0>' 1>&2
         tail "${DEPLOY_LOG_FILE}"
+        _lock_remove
         exit 21
     fi
 
@@ -458,8 +485,8 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         sh "local-pre-default.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
-            _lock_remove
             tail "${DEPLOY_LOG_FILE}"
+            _lock_remove
             exit 17
         fi
         _echo "Finished local-pre-default.hook" >> "${DEPLOY_LOG_FILE}"
@@ -470,8 +497,8 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         sh "local-pre-env.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
-            _lock_remove
             tail "${DEPLOY_LOG_FILE}"
+            _lock_remove
             exit 18
         fi
         _echo "Finished local-pre-env.hook" >> "${DEPLOY_LOG_FILE}"
@@ -482,8 +509,8 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     DEPLOY_REVISION="${GIT_LOG_HASH}"
     DEPLOY_CHANGELOG="${GIT_LOG_AUTHOR}: ${GIT_LOG_SUBJECT}"
 else
-    DEPLOY_REVISION=$(cat "${ENVIRONMENT_OLDEST}" | grep Commit | cut -d ' ' -f 2-)
-    DEPLOY_CHANGELOG=$(cat "${ENVIRONMENT_OLDEST}" | grep Message | cut -d ' ' -f 2-)
+    DEPLOY_REVISION=$(cat "${ENVIRONMENT_OLDEST}/rev.txt" | grep Commit | cut -d ' ' -f 2-)
+    DEPLOY_CHANGELOG=$(cat "${ENVIRONMENT_OLDEST}/rev.txt" | grep Message | cut -d ' ' -f 2-)
 fi
 
 ## -------------------------------------------------------------------------- ##

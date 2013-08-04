@@ -5,12 +5,12 @@ _deploy_finish()
     local server_log_filename="${DEPLOY_LOG_BASE}-${server_name}.log"
 
     _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
-
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
 
-sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
 
 cd "${APPLICATION_DIRECTORY}.current"
 
@@ -32,7 +32,8 @@ if [[ -f remote-post-env.hook ]]; then
         "${server_address}"
 fi
 
-rm -f *.hook
+sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
+    rm -f *.hook
 EOF
 
     code=${?}
