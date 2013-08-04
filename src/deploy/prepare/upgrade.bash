@@ -1,49 +1,49 @@
 _deploy_prepare_upgrade()
 {
     local server_address="${1}"
-    local server_log_filename="${2}"
+    local options="${SSH_OPTIONS}"
 
-    _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
-
+    _ssh "${server_address}" <<EOF
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi
 
 if [[ ! -d "${APPLICATION_DIRECTORY}" ]]; then
-    sudo mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")" &&
-        sudo chown -R${VERBOSE} "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
+    sudo mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")"
 
     test ${?} -gt 0 &&
         echo "Failure creating base directory" &&
         exit 1
 fi
 
+sudo chown "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
+
 if [[ ! -d "${APPLICATION_DIRECTORY}.current" ]]; then
     sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
         mkdir -p${VERBOSE} "${APPLICATION_DIRECTORY}.current"
-    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
-        ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"
-    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
-        rsync \
-            -arzO${VERBOSE} \
-            -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' \
-            "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" \
-            "${APPLICATION_DIRECTORY}.current"
 fi
 
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
-    cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest" &&
-    sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
-        rsync \
-            -arzO${VERBOSE} \
-            --delete \
-            -e 'ssh -A -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' \
-            "${LOCAL_ADDRESS}:${ENVIRONMENT_CURRENT}/" \
-            "${APPLICATION_DIRECTORY}.newest"
+    cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.newest"
+EOF
 
-test ${?} -gt 0 &&
-    echo "Failure when copying new code" &&
-    exit 1
+   test ${?} -gt 0 &&
+        exit 1
+
+    rsync \
+        -arzO${VERBOSE} \
+        --delete \
+        "${ENVIRONMENT_CURRENT}/"* \
+        -e "ssh ${SSH_OPTIONS}" \
+        --rsync-path="sudo rsync" "${SSH_USER}@${server_address}:${APPLICATION_DIRECTORY}.newest/"
+
+    test ${?} -gt 0 &&
+        exit 2
+
+    _ssh "${server_address}" <<EOF
+if [[ "${VERBOSE}" = "v" ]]; then
+    set -x
+fi
 
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
     cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"

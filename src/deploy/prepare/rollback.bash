@@ -1,9 +1,8 @@
 _deploy_prepare_rollback()
 {
     local server_address="${1}"
-    local server_log_filename="${2}"
 
-    _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
+    _ssh "${server_address}" <<EOF
 if [[ "${VERBOSE}" = "v" ]]; then
     set -x
 fi

@@ -272,6 +272,12 @@ declare SSH_CONNECTION_TIMEOUT=$(_conf_get "SshConnectionTimeout" "${APPLICATION
 declare SSH_USER=$(_conf_get "SshUser" "${APPLICATION_CONFIG}")
 declare SSH_PORT=$(_conf_get "SshPort" "${APPLICATION_CONFIG}")
 declare SSH_PRIVATE_KEY_FILE=$(_conf_get "SshPrivateKeyFile" "${APPLICATION_CONFIG}")
+declare SSH_OPTIONS=$(test ! -z ${SSH_PRIVATE_KEY_FILE} && echo "-i ${SSH_PRIVATE_KEY_FILE}")
+        SSH_OPTIONS="${SSH_OPTIONS} -o ConnectTimeout=${SSH_CONNECTION_TIMEOUT}"
+        SSH_OPTIONS="${SSH_OPTIONS} -o PasswordAuthentication=no"
+        SSH_OPTIONS="${SSH_OPTIONS} -o StrictHostKeyChecking=no"
+        SSH_OPTIONS="${SSH_OPTIONS} -o UserKnownHostsFile=/dev/null"
+        SSH_OPTIONS="${SSH_OPTIONS} -p ${SSH_PORT}"
 
 declare DEPLOY_LOG_BASE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
 declare DEPLOY_LOG_FILE="${DEPLOY_LOG_BASE}.log"
@@ -503,8 +509,8 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     DEPLOY_REVISION="${GIT_LOG_HASH}"
     DEPLOY_CHANGELOG="${GIT_LOG_AUTHOR}: ${GIT_LOG_SUBJECT}"
 else
-    DEPLOY_REVISION=$(cat "${ENVIRONMENT_OLDEST}" | grep Commit | cut -d ' ' -f 2-)
-    DEPLOY_CHANGELOG=$(cat "${ENVIRONMENT_OLDEST}" | grep Message | cut -d ' ' -f 2-)
+    DEPLOY_REVISION=$(cat "${ENVIRONMENT_OLDEST}/rev.txt" | grep Commit | cut -d ' ' -f 2-)
+    DEPLOY_CHANGELOG=$(cat "${ENVIRONMENT_OLDEST}/rev.txt" | grep Message | cut -d ' ' -f 2-)
 fi
 
 ## -------------------------------------------------------------------------- ##
