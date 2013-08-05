@@ -403,13 +403,13 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     _echo "\n<33>Preparing application code<0>"
 
     _echo "* Creating new code"
-    sudo mkdir -p "${ENVIRONMENT_NEWEST}"
+    mkdir -p "${ENVIRONMENT_NEWEST}"
 
     git tag -l | egrep -q "^${GIT_TREE_ISH}$"
     if [[ ${?} -gt 0 ]]; then
         GIT_TREE_ISH="${GIT_REMOTE}/${GIT_TREE_ISH}"
     fi
-    git archive "${GIT_TREE_ISH}" | sudo tar -x -C "${ENVIRONMENT_NEWEST}"
+    git archive "${GIT_TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
 
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Failure creating new code<0>" 1>&2
@@ -428,8 +428,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     REV_CONTENT="${REV_CONTENT}Author:    ${GIT_LOG_AUTHOR}\n"
     REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
     REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
-    sudo touch "${ENVIRONMENT_NEWEST}/rev.txt"
-    sudo chown "${DEPLOY_USER}" "${ENVIRONMENT_NEWEST}/rev.txt"
+
     _echo "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
 
     if [ -d "${ENVIRONMENT_OLDEST}" ]; then
@@ -443,33 +442,24 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     fi
 
     _echo "* Replacing current code with the new code"
-    sudo mv "${ENVIRONMENT_NEWEST}" "${ENVIRONMENT_CURRENT}"
+    mv "${ENVIRONMENT_NEWEST}" "${ENVIRONMENT_CURRENT}"
 
     cd "${OLDPWD}"
     cd "${ENVIRONMENT_CURRENT}"
 
     test -f "${SETTINGS_DIRECTORY}/default.hooks/local-pre" &&
-        sudo cp "${SETTINGS_DIRECTORY}/default.hooks/local-pre" "${ENVIRONMENT_CURRENT}/local-pre-default.hook"
+        cp "${SETTINGS_DIRECTORY}/default.hooks/local-pre" "${ENVIRONMENT_CURRENT}/local-pre-default.hook"
     test -f "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" &&
-        sudo cp "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" "${ENVIRONMENT_CURRENT}/remote-pre-default.hook"
+        cp "${SETTINGS_DIRECTORY}/default.hooks/remote-pre" "${ENVIRONMENT_CURRENT}/remote-pre-default.hook"
     test -f "${SETTINGS_DIRECTORY}/default.hooks/remote-post" &&
-        sudo cp "${SETTINGS_DIRECTORY}/default.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-default.hook"
+        cp "${SETTINGS_DIRECTORY}/default.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-default.hook"
 
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" &&
-        sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" "${ENVIRONMENT_CURRENT}/local-pre-env.hook"
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/local-pre" "${ENVIRONMENT_CURRENT}/local-pre-env.hook"
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" &&
-        sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" "${ENVIRONMENT_CURRENT}/remote-pre-env.hook"
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-pre" "${ENVIRONMENT_CURRENT}/remote-pre-env.hook"
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" &&
-        sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-env.hook"
-
-    _echo "* Defining file system owner and group"
-    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" 2>&1 | _log
-    if [[ ${?} -gt 0 ]]; then
-        _echo '<31>Failure when defining file system owner and group<0>' 1>&2
-        tail "${DEPLOY_LOG_FILENAME}"
-        _lock_remove
-        exit 21
-    fi
+        cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-env.hook"
 
     _echo "* Applying overlays"
     export LC_ALL=C
@@ -511,6 +501,15 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
             exit 18
         fi
         _log "Finished local-pre-env.hook"
+    fi
+
+    _echo "* Defining file system owner and group"
+    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" 2>&1 | _log
+    if [[ ${?} -gt 0 ]]; then
+        _echo '<31>Failure when defining file system owner and group<0>' 1>&2
+        tail "${DEPLOY_LOG_FILENAME}"
+        _lock_remove
+        exit 21
     fi
 
     cd "${OLDPWD}"
