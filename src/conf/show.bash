@@ -12,7 +12,7 @@ _conf_show()
     local new_relic_notification=$(_conf_get NewRelicNotification)
     local new_relic_api_key=$(_conf_get NewRelicApiKey || echo "<35>None<0>")
     local new_relic_application_id=$(_conf_get NewRelicApplicationId || echo "<35>None<0>")
-    local settings_directory=$(_conf_get SettingsDirectory)
+    local settings_directory="${SETTINGS_DIRECTORY}"
 
     _echo "<32>Global settings<0>"
     _echo
