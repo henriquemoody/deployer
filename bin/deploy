@@ -56,7 +56,8 @@ source "${ROOT_DIRECTORY}/src/log.bash"
 source "${ROOT_DIRECTORY}/src/ssh.bash"
 
 ## -------------------------------------------------------------------------- ##
-while [[ "${1}" = -* ]]; do
+ARGS=""
+while [[ ! -z "${1}" ]]; do
     case "${1}" in
 
         --help | -h)
@@ -80,11 +81,24 @@ while [[ "${1}" = -* ]]; do
             ENVIRONMENT="${2}"
             shift 2
         ;;
+
+        --verbose | -v)
+            VERBOSE="v"
+            shift 1
+        ;;
+
+        --yes | -y)
+            YES=1
+            shift 1
+        ;;
+
         *)
-            break
+            ARGS="${ARGS} ${1}"
+            shift
         ;;
     esac
 done
+set - ${ARGS}
 
 ## -------------------------------------------------------------------------- ##
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
@@ -225,17 +239,14 @@ while [[ "${1}" = -* ]]; do
 
         --remote | -r)
             GIT_REMOTE="${2}"
-            shift 2
         ;;
 
         --timeout | -m)
             SSH_CONNECTION_TIMEOUT="${2}"
-            shift 2
         ;;
 
         --tree-ish | -i)
             GIT_TREE_ISH="${2}"
-            shift 2
         ;;
 
         --type | -t)
@@ -245,17 +256,6 @@ while [[ "${1}" = -* ]]; do
             fi
 
             DEPLOY_TYPE="${2}"
-            shift 2
-        ;;
-
-        --verbose | -v)
-            VERBOSE="v"
-            shift 1
-        ;;
-
-        --yes | -y)
-            YES=1
-            shift 1
         ;;
 
         -*)
@@ -264,6 +264,8 @@ while [[ "${1}" = -* ]]; do
         ;;
 
     esac
+
+    shift 2
 done
 
 ## -------------------------------------------------------------------------- ##
