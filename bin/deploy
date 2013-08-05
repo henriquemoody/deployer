@@ -18,6 +18,7 @@
 
 declare -r SCRIPT=$(readlink "${0}" 2> /dev/null || echo "${0}")
 declare -r SCRIPT_NAME=$(basename ${0})
+declare -r SCRIPT_PID=$(echo ${$})
 declare -r ROOT_DIRECTORY=$(cd "$(dirname "${SCRIPT}")/.." && pwd)
 declare -r SETTINGS_DIRECTORY=$(test "$(whoami)" = "root" && echo "/etc/deployer" || echo "${HOME}/.deployer")
 
