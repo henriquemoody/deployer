@@ -479,9 +479,11 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     _echo "* Running pre hooks"
 
+    HOOK_DEBUG=$(test ! -z "${VERBOSE}" && echo '-x')
+
     if [ -f "local-pre-default.hook" ]; then
         _log "Running local-pre-default.hook"
-        sh "local-pre-default.hook" 2>&1 | _log
+        sh ${HOOK_DEBUG} "local-pre-default.hook" >> "${DEPLOY_LOG_FILENAME}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
             tail "${DEPLOY_LOG_FILENAME}"
@@ -493,7 +495,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     if [ -f "local-pre-env.hook" ]; then
         _log "Running local-pre-env.hook"
-        sh "local-pre-env.hook" 2>&1 | _log
+        sh ${HOOK_DEBUG} "local-pre-env.hook" >> "${DEPLOY_LOG_FILENAME}" 2>&1
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
             tail "${DEPLOY_LOG_FILENAME}"
@@ -504,7 +506,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     fi
 
     _echo "* Defining file system owner and group"
-    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" 2>&1 | _log
+    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" >> "${DEPLOY_LOG_FILENAME}" 2>&1
     if [[ ${?} -gt 0 ]]; then
         _echo '<31>Failure when defining file system owner and group<0>' 1>&2
         tail "${DEPLOY_LOG_FILENAME}"
