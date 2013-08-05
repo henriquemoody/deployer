@@ -25,7 +25,7 @@ _log()
         filename="${DEPLOY_LOG_FILENAME}"
     fi
 
-    if [[ -f "${filename}" ]]; then
+    if [[ ! -f "${filename}" ]]; then
         touch "${filename}"
     fi
 
