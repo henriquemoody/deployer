@@ -6,10 +6,10 @@ _deploy_prepare()
 
     case "${DEPLOY_TYPE}" in
         rollback )
-            _deploy_prepare_rollback "${server_address}" >> "${server_log_filename}" 2>&1
+            _deploy_prepare_rollback "${server_address}" 2>&1 | _log "debug" "${server_log_filename}"
         ;;
         upgrade )
-            _deploy_prepare_upgrade "${server_address}" >> "${server_log_filename}" 2>&1
+            _deploy_prepare_upgrade "${server_address}" 2>&1 | _log "debug" "${server_log_filename}"
         ;;
         *)
             _echo "<31>Inválid deploy type<0>" 1>&2

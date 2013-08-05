@@ -19,9 +19,10 @@
 declare -r SCRIPT=$(readlink "${0}" 2> /dev/null || echo "${0}")
 declare -r SCRIPT_NAME=$(basename ${0})
 declare -r ROOT_DIRECTORY=$(cd "$(dirname "${SCRIPT}")/.." && pwd)
+declare -r SETTINGS_DIRECTORY=$(test "$(whoami)" = "root" && echo "/etc/deployer" || echo "${HOME}/.deployer")
 
-declare -r APPLICATION_CONFIG="${ROOT_DIRECTORY}/.conf"
-declare -r APPLICATION_SOURCE="${ROOT_DIRECTORY}/var/source"
+declare -r APPLICATION_CONFIG="${SETTINGS_DIRECTORY}/default.conf"
+declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/var/source"
 declare -r DATETIME=$(date '+%Y-%m-%d %H:%M:%S')
 declare -r DELIMITER=":"
 declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoami)
@@ -50,6 +51,7 @@ source "${ROOT_DIRECTORY}/src/echo.bash"
 source "${ROOT_DIRECTORY}/src/help.bash"
 source "${ROOT_DIRECTORY}/src/lock/create.bash"
 source "${ROOT_DIRECTORY}/src/lock/remove.bash"
+source "${ROOT_DIRECTORY}/src/log.bash"
 source "${ROOT_DIRECTORY}/src/ssh.bash"
 
 ## -------------------------------------------------------------------------- ##
@@ -90,35 +92,37 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
         exit 3
     fi
 
-    _echo -n "First time running this script? Choose the directory where I will find the configurations files: \n> "
-    read -e SETTINGS_DIRECTORY
     if [[ ! -d "${SETTINGS_DIRECTORY}" ]]; then
-        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid directory.<0>" 1>&2
-        exit 4
+        mkdir -p "${SETTINGS_DIRECTORY}"
+        test ${?} -gt 0 &&
+            _echo "<31>Unable to create directory \"${SETTINGS_DIRECTORY}\".<0>" 1>&2 &&
+            exit 4
     fi
+
     if [[ ! -w "${SETTINGS_DIRECTORY}" ]]; then
         _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable.<0>" 1>&2
         exit 5
     fi
-    cp -r "${ROOT_DIRECTORY}/etc/"* "${SETTINGS_DIRECTORY}/"
-    rm -f "${SETTINGS_DIRECTORY}/default.conf"
 
-    _echo "<32>Please fill the data below"
+    mkdir -p "${SETTINGS_DIRECTORY}/var/log"
+    cp -r "${ROOT_DIRECTORY}/etc/"* "${SETTINGS_DIRECTORY}/"
+
+    _echo -n "<32>First time running this script? Please fill the data below:<0>"
     _echo
 
-    _echo -n "Application's name: "
+    _echo -n "<33>Application's name:<0> "
     read InputName
     test -z "${InputName}" &&
         _echo "<31>Application's name can not be empty<0>" 1>&2 &&
         exit 6
 
-    _echo -n "Remote application's directory: "
+    _echo -n "<33>Remote application's directory:<0> "
     read InputDirectory
     test -z "${InputDirectory}" &&
         _echo "<31>Application's remote directory can not be empty<0>" 1>&2 &&
         exit 7
 
-    _echo -n "Application's GIT repository: "
+    _echo -n "<33>Application's GIT repository:<0> "
     read InputRepository
     test -z "${InputRepository}" &&
         _echo "<31>Application's GIT repository can not be empty<0>" 1>&2 &&
@@ -133,7 +137,7 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
         exit 9
     fi
 
-    _echo -n "File system owner (default \"www-data\"): "
+    _echo -n "<33>File system owner (default \"<0>www-data<33>\"):<0> "
     read InputFileSystemOwner
     if [[ -z "${InputFileSystemOwner}" ]]; then
        InputFileSystemOwner="www-data"
@@ -145,41 +149,41 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
         exit 10
     fi
 
-    _echo -n "File system group (default \"www-data\"): "
+    _echo -n "<33>File system group (default \"<0>www-data<33>\"):<0> "
     read InputFileSystemGroup
     if [[ -z "${InputFileSystemGroup}" ]]; then
        InputFileSystemGroup="www-data"
     fi
 
-    _echo -n "SSH connection timeout (default \"5\"): "
+    _echo -n "<33>SSH connection timeout (default \"<0>5<33>\"):<0> "
     read InputSshConnectionTimeout
     if [[ -z "${InputSshConnectionTimeout}" ]]; then
        InputSshConnectionTimeout=5
     fi
 
-    _echo -n "SSH user (default \"root\"): "
+    _echo -n "<33>SSH user (default \"<0>${DEPLOY_USER}<33>\"):<0> "
     read InputSshUser
     if [[ -z "${InputSshUser}" ]]; then
-       InputSshUser="root"
+       InputSshUser="${DEPLOY_USER}"
     fi
 
-    _echo -n "SSH port (default \"22\"): "
+    _echo -n "<33>SSH port (default \"<0>22<33>\"):<0> "
     read InputSshPort
     if [[ -z "${InputSshPort}" ]]; then
        InputSshPort="22"
     fi
 
-    _echo -n "SSH private key file (will use yours by default): "
+    _echo -n "<33>SSH private key file (will use yours by default):<0> "
     read -e InputSshPrivateKeyFile
 
-    _echo -n "Do you want to enable New Relic notifications? [y/N]: "
+    _echo -n "<33>Do you want to enable New Relic notifications? [y/N]:<0> "
     read InputEnableNewRelicNotification
     InputEnableNewRelicNotification=$(echo "${InputEnableNewRelicNotification}" | tr [a-z] [A-Z])
     if [[ "${InputEnableNewRelicNotification}" = 'Y' ]]  || [[ "${InputEnableNewRelicNotification}" = 'YES' ]]; then
         InputNewRelicNotification="On"
-        _echo -n "  > Your New Relic API key: "
+        _echo -n "<33>  > Your New Relic API key:<0> "
         read InputNewRelicApiKey
-        _echo -n "  > Your New Relic application id: "
+        _echo -n "<33>  > Your New Relic application id:<0> "
         read InputNewRelicApplicationId
     else
         InputNewRelicNotification="Off"
@@ -199,17 +203,15 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     _conf_set "NewRelicNotification" "${InputNewRelicNotification}"
     _conf_set "NewRelicApiKey" "${InputNewRelicApiKey}"
     _conf_set "NewRelicApplicationId" "${InputNewRelicApplicationId}"
-    _conf_set "SettingsDirectory" "${SETTINGS_DIRECTORY}"
 fi
 
-declare -r SETTINGS_DIRECTORY=$(_conf_get "SettingsDirectory" "${APPLICATION_CONFIG}")
 declare -r ENVIRONMENT_CONFIG="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.conf"
 declare -r ENVIRONMENT_SERVERS="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.servers"
 declare -r ENVIRONMENT_OVERLAY="${SETTINGS_DIRECTORY}/${ENVIRONMENT}.overlay"
 
-declare -r ENVIRONMENT_CURRENT="${ROOT_DIRECTORY}/var/${ENVIRONMENT}"
-declare -r ENVIRONMENT_NEWEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.newest"
-declare -r ENVIRONMENT_OLDEST="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.oldest"
+declare -r ENVIRONMENT_CURRENT="${SETTINGS_DIRECTORY}/var/${ENVIRONMENT}"
+declare -r ENVIRONMENT_NEWEST="${SETTINGS_DIRECTORY}/var/${ENVIRONMENT}.newest"
+declare -r ENVIRONMENT_OLDEST="${SETTINGS_DIRECTORY}/var/${ENVIRONMENT}.oldest"
 
 ## -------------------------------------------------------------------------- ##
 while [[ "${1}" = -* ]]; do
@@ -279,9 +281,9 @@ declare SSH_OPTIONS=$(test ! -z ${SSH_PRIVATE_KEY_FILE} && echo "-i ${SSH_PRIVAT
         SSH_OPTIONS="${SSH_OPTIONS} -o UserKnownHostsFile=/dev/null"
         SSH_OPTIONS="${SSH_OPTIONS} -p ${SSH_PORT}"
 
-declare DEPLOY_LOG_BASE="${ROOT_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
-declare DEPLOY_LOG_FILE="${DEPLOY_LOG_BASE}.log"
-declare DEPLOY_LOCK_FILE="${ROOT_DIRECTORY}/var/${ENVIRONMENT}.lock"
+declare DEPLOY_LOG_BASE="${SETTINGS_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
+declare DEPLOY_LOG_FILENAME="${DEPLOY_LOG_BASE}.log"
+declare DEPLOY_LOCK_FILE="/var/run/deployer/${ENVIRONMENT}.pid"
 
 declare APPLICATION_DIRECTORY=$(_conf_get Directory)
 declare APPLICATION_GROUP=$(_conf_get FileSystemGroup)
@@ -325,8 +327,6 @@ if [[ ! -f "${ENVIRONMENT_SERVERS}" ]]; then
     exit 22
 fi
 
-_lock_create
-
 DEPLOY_DESCRIPTION="Deploy ${DEPLOY_TYPE} of ${GIT_TREE_ISH} on ${ENVIRONMENT}"
 
 _echo
@@ -337,7 +337,18 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 fi
 _echo "<32> on \"${ENVIRONMENT}\" environment<0>"
 
-_echo "${DATETIME}" > "${DEPLOY_LOG_FILE}"
+_echo "\n<33>Checking superuser privileges<0>"
+sudo mkdir -p "/var/run/deployer" > /dev/null
+if [[ ${?} -gt 0 ]]; then
+    _echo "<31>You don't have superuser privileges<0>" 1>&2
+    exit 11
+else
+    _echo "<32>You have superuser privileges<0>"
+fi
+
+_lock_create
+
+_log 'Starting deploy'
 
 ## -------------------------------------------------------------------------- ##
 _echo "\n<33>Checking access to servers<0>"
@@ -389,9 +400,6 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     ## ---------------------------------------------------------------------- ##
     _echo "\n<33>Preparing application code<0>"
-
-    _echo "* Checking superuser privileges"
-    sudo echo > /dev/null
 
     _echo "* Creating new code"
     sudo mkdir -p "${ENVIRONMENT_NEWEST}"
@@ -454,10 +462,10 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         sudo cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-env.hook"
 
     _echo "* Defining file system owner and group"
-    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" >> "${DEPLOY_LOG_FILE}" 2>&1
+    sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" 2>&1 | _log
     if [[ ${?} -gt 0 ]]; then
         _echo '<31>Failure when defining file system owner and group<0>' 1>&2
-        tail "${DEPLOY_LOG_FILE}"
+        tail "${DEPLOY_LOG_FILENAME}"
         _lock_remove
         exit 21
     fi
@@ -481,27 +489,27 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     _echo "* Running pre hooks"
 
     if [ -f "local-pre-default.hook" ]; then
-        _echo "Running local-pre-default.hook" >> "${DEPLOY_LOG_FILE}"
-        sh "local-pre-default.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
+        _log "Running local-pre-default.hook"
+        sh "local-pre-default.hook" 2>&1 | _log
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
-            tail "${DEPLOY_LOG_FILE}"
+            tail "${DEPLOY_LOG_FILENAME}"
             _lock_remove
             exit 17
         fi
-        _echo "Finished local-pre-default.hook" >> "${DEPLOY_LOG_FILE}"
+        _log "Finished local-pre-default.hook"
     fi
 
     if [ -f "local-pre-env.hook" ]; then
-        _echo "Running local-pre-env.hook" >> "${DEPLOY_LOG_FILE}"
-        sh "local-pre-env.hook" >> "${DEPLOY_LOG_FILE}" 2>&1
+        _log "Running local-pre-env.hook"
+        sh "local-pre-env.hook" 2>&1 | _log
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
-            tail "${DEPLOY_LOG_FILE}"
+            tail "${DEPLOY_LOG_FILENAME}"
             _lock_remove
             exit 18
         fi
-        _echo "Finished local-pre-env.hook" >> "${DEPLOY_LOG_FILE}"
+        _log "Finished local-pre-env.hook"
     fi
 
     cd "${OLDPWD}"
@@ -593,6 +601,9 @@ test ${IS_DEPLOYED} -eq 0 &&
     _echo "<31>An error occurred when deploying to servers. Please check with the administrator.<0>" 1>&2 &&
     _lock_remove &&
     exit 20
+
+## -------------------------------------------------------------------------- ##
+_log 'Finished deploy'
 
 ## -------------------------------------------------------------------------- ##
 _echo "\n<33>Cleaning code on servers<0>"
