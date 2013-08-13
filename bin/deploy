@@ -275,9 +275,11 @@ declare SSH_OPTIONS=$(test ! -z ${SSH_PRIVATE_KEY_FILE} && echo "-i ${SSH_PRIVAT
         SSH_OPTIONS="${SSH_OPTIONS} -o UserKnownHostsFile=/dev/null"
         SSH_OPTIONS="${SSH_OPTIONS} -p ${SSH_PORT}"
 
+declare -r DEPLOY_LOCK_FILE="/var/run/deployer/${ENVIRONMENT}.pid"
+declare -r DEPLOY_LOG_FILENAME_GLOBAL="/var/log/deployer.log"
+
 declare -r DEPLOY_LOG_BASE="${SETTINGS_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
 declare -r DEPLOY_LOG_FILENAME="${DEPLOY_LOG_BASE}.log"
-declare -r DEPLOY_LOCK_FILE="/var/run/deployer/${ENVIRONMENT}.pid"
 
 declare -r APPLICATION_DIRECTORY=$(_conf_get Directory)
 declare -r APPLICATION_GROUP=$(_conf_get FileSystemGroup)
@@ -346,6 +348,8 @@ else
 fi
 
 _lock_create
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${DEPLOY_USER}: ${DEPLOY_TYPE} of ${GIT_TREE_ISH} on ${ENVIRONMENT}" |
+    sudo tee -a "${DEPLOY_LOG_FILENAME_GLOBAL}" > /dev/null
 
 _log 'Starting deploy'
 
@@ -377,7 +381,7 @@ done
 
 test ${IS_ALLOWED} -eq 0 &&
     _echo "<31>Please, check your SSH key or server availability and try again later.<0>" 1>&2 &&
-    _lock_remove &&
+    _lock_remove 15 &&
     exit 15
 
 ## -------------------------------------------------------------------------- ##
@@ -411,7 +415,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Failure creating new code<0>" 1>&2
-        _lock_remove
+        _lock_remove 16
         exit 16
     fi
 
@@ -485,7 +489,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
             tail "${DEPLOY_LOG_FILENAME}"
-            _lock_remove
+            _lock_remove 17
             exit 17
         fi
         _log "Finished local-pre-default.hook"
@@ -497,7 +501,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
             tail "${DEPLOY_LOG_FILENAME}"
-            _lock_remove
+            _lock_remove 18
             exit 18
         fi
         _log "Finished local-pre-env.hook"
@@ -508,7 +512,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     if [[ ${?} -gt 0 ]]; then
         _echo '<31>Failure when defining file system owner and group<0>' 1>&2
         tail "${DEPLOY_LOG_FILENAME}"
-        _lock_remove
+        _lock_remove 21
         exit 21
     fi
 
@@ -551,7 +555,7 @@ done
 
 test ${IS_SYNCED} -eq 0 &&
     _echo "<31>An error occurred when syncing servers. Please check with the administrator.<0>" 1>&2 &&
-    _lock_remove &&
+    _lock_remove 19 &&
     exit 19
 
 DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} was successful done."
@@ -599,7 +603,7 @@ done
 
 test ${IS_DEPLOYED} -eq 0 &&
     _echo "<31>An error occurred when deploying to servers. Please check with the administrator.<0>" 1>&2 &&
-    _lock_remove &&
+    _lock_remove 20 &&
     exit 20
 
 ## -------------------------------------------------------------------------- ##
