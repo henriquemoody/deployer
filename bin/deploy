@@ -287,7 +287,11 @@ declare -r APPLICATION_REPOSITORY=$(_conf_get Repository)
 declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/var/$(echo "${APPLICATION_REPOSITORY}" | _tool_clearname)"
 
 ## -------------------------------------------------------------------------- ##
-_echo "<32;4>Deployer<0>"
+_echo "<32;1>   ___           __
+  / _ \___ ___  / /__  __ _____ ____
+ / // / -_) _ \/ / _ \/ // / -_) __/
+/____/\__/ .__/_/\___/\_, /\__/_/
+        /_/          /___/          <0>"
 _echo "<36>Deploying <36;1>${APPLICATION_NAME}<0><36> as <36;1>${DEPLOY_USER}<0>"
 _echo
 ## -------------------------------------------------------------------------- ##
