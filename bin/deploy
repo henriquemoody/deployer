@@ -23,7 +23,6 @@ declare -r ROOT_DIRECTORY=$(cd "$(dirname "${SCRIPT}")/.." && pwd)
 declare -r SETTINGS_DIRECTORY=$(test "$(whoami)" = "root" && echo "/etc/deployer" || echo "${HOME}/.deployer")
 
 declare -r APPLICATION_CONFIG="${SETTINGS_DIRECTORY}/default.conf"
-declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/var/source"
 declare -r DATETIME=$(date '+%Y-%m-%d %H:%M:%S')
 declare -r DELIMITER=":"
 declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoami)
@@ -54,6 +53,7 @@ source "${ROOT_DIRECTORY}/src/lock/create.bash"
 source "${ROOT_DIRECTORY}/src/lock/remove.bash"
 source "${ROOT_DIRECTORY}/src/log.bash"
 source "${ROOT_DIRECTORY}/src/ssh.bash"
+source "${ROOT_DIRECTORY}/src/tool/clearname.bash"
 
 ## -------------------------------------------------------------------------- ##
 ARGS=""
@@ -142,15 +142,6 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     test -z "${InputRepository}" &&
         _echo "<31>Application's GIT repository can not be empty<0>" 1>&2 &&
         exit 8
-
-    if [[ -d "${APPLICATION_SOURCE}" ]]; then
-        rm -rf "${APPLICATION_SOURCE}"
-    fi
-    git clone --quiet "${InputRepository}" "${APPLICATION_SOURCE}"
-    if [[ ${?} -gt 0 ]]; then
-        _echo "<31>Unable to clone GIT repository<0>" 1>&2
-        exit 9
-    fi
 
     _echo -n "<33>File system owner (default \"<0>www-data<33>\"):<0> "
     read InputFileSystemOwner
@@ -284,18 +275,25 @@ declare SSH_OPTIONS=$(test ! -z ${SSH_PRIVATE_KEY_FILE} && echo "-i ${SSH_PRIVAT
         SSH_OPTIONS="${SSH_OPTIONS} -o UserKnownHostsFile=/dev/null"
         SSH_OPTIONS="${SSH_OPTIONS} -p ${SSH_PORT}"
 
-declare DEPLOY_LOG_BASE="${SETTINGS_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
-declare DEPLOY_LOG_FILENAME="${DEPLOY_LOG_BASE}.log"
-declare DEPLOY_LOCK_FILE="/var/run/deployer/${ENVIRONMENT}.pid"
+declare -r DEPLOY_LOCK_FILE="/var/run/deployer/${ENVIRONMENT}.pid"
+declare -r DEPLOY_LOG_FILENAME_GLOBAL="/var/log/deployer.log"
 
-declare APPLICATION_DIRECTORY=$(_conf_get Directory)
-declare APPLICATION_GROUP=$(_conf_get FileSystemGroup)
-declare APPLICATION_NAME=$(_conf_get Name)
-declare APPLICATION_OWNER=$(_conf_get FileSystemOwner)
-declare APPLICATION_REPOSITORY=$(_conf_get Repository)
+declare -r DEPLOY_LOG_BASE="${SETTINGS_DIRECTORY}/var/log/${ENVIRONMENT}_${TIMESTAMP}"
+declare -r DEPLOY_LOG_FILENAME="${DEPLOY_LOG_BASE}.log"
+
+declare -r APPLICATION_DIRECTORY=$(_conf_get Directory)
+declare -r APPLICATION_GROUP=$(_conf_get FileSystemGroup)
+declare -r APPLICATION_NAME=$(_conf_get Name)
+declare -r APPLICATION_OWNER=$(_conf_get FileSystemOwner)
+declare -r APPLICATION_REPOSITORY=$(_conf_get Repository)
+declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/var/$(echo "${APPLICATION_REPOSITORY}" | _tool_clearname)"
 
 ## -------------------------------------------------------------------------- ##
-_echo "<32;4>Deployer<0>"
+_echo "<32;1>   ___           __
+  / _ \___ ___  / /__  __ _____ ____
+ / // / -_) _ \/ / _ \/ // / -_) __/
+/____/\__/ .__/_/\___/\_, /\__/_/
+        /_/          /___/          <0>"
 _echo "<36>Deploying <36;1>${APPLICATION_NAME}<0><36> as <36;1>${DEPLOY_USER}<0>"
 _echo
 ## -------------------------------------------------------------------------- ##
@@ -350,6 +348,8 @@ else
 fi
 
 _lock_create
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${DEPLOY_USER}: ${DEPLOY_TYPE} of ${GIT_TREE_ISH} on ${ENVIRONMENT}" |
+    sudo tee -a "${DEPLOY_LOG_FILENAME_GLOBAL}" > /dev/null
 
 _log 'Starting deploy'
 
@@ -381,7 +381,7 @@ done
 
 test ${IS_ALLOWED} -eq 0 &&
     _echo "<31>Please, check your SSH key or server availability and try again later.<0>" 1>&2 &&
-    _lock_remove &&
+    _lock_remove 15 &&
     exit 15
 
 ## -------------------------------------------------------------------------- ##
@@ -415,7 +415,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     if [[ ${?} -gt 0 ]]; then
         _echo "<31>Failure creating new code<0>" 1>&2
-        _lock_remove
+        _lock_remove 16
         exit 16
     fi
 
@@ -489,7 +489,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
             tail "${DEPLOY_LOG_FILENAME}"
-            _lock_remove
+            _lock_remove 17
             exit 17
         fi
         _log "Finished local-pre-default.hook"
@@ -501,7 +501,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         if [[ ${?} -gt 0 ]]; then
             _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
             tail "${DEPLOY_LOG_FILENAME}"
-            _lock_remove
+            _lock_remove 18
             exit 18
         fi
         _log "Finished local-pre-env.hook"
@@ -512,7 +512,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     if [[ ${?} -gt 0 ]]; then
         _echo '<31>Failure when defining file system owner and group<0>' 1>&2
         tail "${DEPLOY_LOG_FILENAME}"
-        _lock_remove
+        _lock_remove 21
         exit 21
     fi
 
@@ -555,7 +555,7 @@ done
 
 test ${IS_SYNCED} -eq 0 &&
     _echo "<31>An error occurred when syncing servers. Please check with the administrator.<0>" 1>&2 &&
-    _lock_remove &&
+    _lock_remove 19 &&
     exit 19
 
 DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} was successful done."
@@ -603,7 +603,7 @@ done
 
 test ${IS_DEPLOYED} -eq 0 &&
     _echo "<31>An error occurred when deploying to servers. Please check with the administrator.<0>" 1>&2 &&
-    _lock_remove &&
+    _lock_remove 20 &&
     exit 20
 
 ## -------------------------------------------------------------------------- ##

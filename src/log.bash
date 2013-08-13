@@ -29,6 +29,6 @@ _log()
         touch "${filename}"
     fi
 
-    content="[$(date '+%Y-%m-%d %H:%M:%S')] [${category}] ${message}" 
+    content="[$(date '+%Y-%m-%d %H:%M:%S')] [${category}] ${message}"
     echo "${content}" >> "${filename}"
 }
