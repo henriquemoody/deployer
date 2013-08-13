@@ -286,7 +286,7 @@ declare -r APPLICATION_GROUP=$(_conf_get FileSystemGroup)
 declare -r APPLICATION_NAME=$(_conf_get Name)
 declare -r APPLICATION_OWNER=$(_conf_get FileSystemOwner)
 declare -r APPLICATION_REPOSITORY=$(_conf_get Repository)
-declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/var/$(echo "${APPLICATION_REPOSITORY}" | _tool_clearname)"
+declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/src/$(echo "${APPLICATION_REPOSITORY}" | _tool_clearname)"
 
 ## -------------------------------------------------------------------------- ##
 _echo "<32;1>   ___           __
