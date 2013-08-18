@@ -34,7 +34,6 @@ declare -r DELIMITER=":"
 declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoami)
 declare -r DEPLOYER_LOG="/var/log/deployer.log"
 declare -r LOCAL_ADDRESS=$(hostname)
-declare -r TIMESTAMP=$(date '+%s')
 
 declare DEPLOY_TYPE="upgrade"
 declare ENVIRONMENT="live"
@@ -55,12 +54,13 @@ source "${ROOT_DIRECTORY}/src/deploy/finish.bash"
 source "${ROOT_DIRECTORY}/src/deploy/prepare.bash"
 source "${ROOT_DIRECTORY}/src/deploy/prepare/rollback.bash"
 source "${ROOT_DIRECTORY}/src/deploy/prepare/upgrade.bash"
-source "${ROOT_DIRECTORY}/src/echo.bash"
+source "${ROOT_DIRECTORY}/src/err.bash"
 source "${ROOT_DIRECTORY}/src/exit.bash"
 source "${ROOT_DIRECTORY}/src/help.bash"
 source "${ROOT_DIRECTORY}/src/lock/create.bash"
 source "${ROOT_DIRECTORY}/src/lock/remove.bash"
 source "${ROOT_DIRECTORY}/src/log.bash"
+source "${ROOT_DIRECTORY}/src/out.bash"
 source "${ROOT_DIRECTORY}/src/ssh.bash"
 source "${ROOT_DIRECTORY}/src/tool/clearname.bash"
 
@@ -112,47 +112,47 @@ set - ${ARGS}
 ## -------------------------------------------------------------------------- ##
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     if [ ${SCRIPT_INTERACTIVE} -eq 0 ]; then
-        _echo "<31>You do not have configuration file, please run it in an interactive shell first.<0>" 1>&2
+        _err "<31>You do not have configuration file, please run it in an interactive shell first.<0>"
         _exit 3
     fi
 
     if [[ ! -d "${SETTINGS_DIRECTORY}" ]]; then
         mkdir -p "${SETTINGS_DIRECTORY}"
         test ${?} -gt 0 &&
-            _echo "<31>Unable to create directory \"${SETTINGS_DIRECTORY}\".<0>" 1>&2 &&
+            _err "<31>Unable to create directory \"${SETTINGS_DIRECTORY}\".<0>" &&
             _exit 4
     fi
 
     if [[ ! -w "${SETTINGS_DIRECTORY}" ]]; then
-        _echo "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable.<0>" 1>&2
+        _err "<31>\"${SETTINGS_DIRECTORY}\" is not a valid writable.<0>"
         _exit 5
     fi
 
     mkdir -p "${SETTINGS_DIRECTORY}/var/log"
     cp -r "${ROOT_DIRECTORY}/etc/"* "${SETTINGS_DIRECTORY}/"
 
-    _echo -n "<32>First time running this script? Please fill the data below:<0>"
-    _echo
+    _out -n "<32>First time running this script? Please fill the data below:<0>"
+    _out
 
-    _echo -n "<33>Application's name:<0> "
+    _out -n "<33>Application's name:<0> "
     read InputName
     test -z "${InputName}" &&
-        _echo "<31>Application's name can not be empty<0>" 1>&2 &&
+        _err "<31>Application's name can not be empty<0>" &&
         _exit 6
 
-    _echo -n "<33>Remote application's directory:<0> "
+    _out -n "<33>Remote application's directory:<0> "
     read InputDirectory
     test -z "${InputDirectory}" &&
-        _echo "<31>Application's remote directory can not be empty<0>" 1>&2 &&
+        _err "<31>Application's remote directory can not be empty<0>" &&
         _exit 7
 
-    _echo -n "<33>Application's GIT repository:<0> "
+    _out -n "<33>Application's GIT repository:<0> "
     read InputRepository
     test -z "${InputRepository}" &&
-        _echo "<31>Application's GIT repository can not be empty<0>" 1>&2 &&
+        _err "<31>Application's GIT repository can not be empty<0>" &&
         _exit 8
 
-    _echo -n "<33>File system owner (default \"<0>www-data<33>\"):<0> "
+    _out -n "<33>File system owner (default \"<0>www-data<33>\"):<0> "
     read InputFileSystemOwner
     if [[ -z "${InputFileSystemOwner}" ]]; then
        InputFileSystemOwner="www-data"
@@ -160,45 +160,45 @@ if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
 
     id "${InputFileSystemOwner}" > /dev/null 2>&1
     if [[ ${?} -gt 0 ]]; then
-        _echo "<31>User ${InputFileSystemOwner} does not exists<0>" 1>&2
+        _err "<31>User ${InputFileSystemOwner} does not exists<0>"
         _exit 10
     fi
 
-    _echo -n "<33>File system group (default \"<0>www-data<33>\"):<0> "
+    _out -n "<33>File system group (default \"<0>www-data<33>\"):<0> "
     read InputFileSystemGroup
     if [[ -z "${InputFileSystemGroup}" ]]; then
        InputFileSystemGroup="www-data"
     fi
 
-    _echo -n "<33>SSH connection timeout (default \"<0>5<33>\"):<0> "
+    _out -n "<33>SSH connection timeout (default \"<0>5<33>\"):<0> "
     read InputSshConnectionTimeout
     if [[ -z "${InputSshConnectionTimeout}" ]]; then
        InputSshConnectionTimeout=5
     fi
 
-    _echo -n "<33>SSH user (default \"<0>${DEPLOY_USER}<33>\"):<0> "
+    _out -n "<33>SSH user (default \"<0>${DEPLOY_USER}<33>\"):<0> "
     read InputSshUser
     if [[ -z "${InputSshUser}" ]]; then
        InputSshUser="${DEPLOY_USER}"
     fi
 
-    _echo -n "<33>SSH port (default \"<0>22<33>\"):<0> "
+    _out -n "<33>SSH port (default \"<0>22<33>\"):<0> "
     read InputSshPort
     if [[ -z "${InputSshPort}" ]]; then
        InputSshPort="22"
     fi
 
-    _echo -n "<33>SSH private key file (will use yours by default):<0> "
+    _out -n "<33>SSH private key file (will use yours by default):<0> "
     read -e InputSshPrivateKeyFile
 
-    _echo -n "<33>Do you want to enable New Relic notifications? [y/N]:<0> "
+    _out -n "<33>Do you want to enable New Relic notifications? [y/N]:<0> "
     read InputEnableNewRelicNotification
     InputEnableNewRelicNotification=$(echo "${InputEnableNewRelicNotification}" | tr [a-z] [A-Z])
     if [[ "${InputEnableNewRelicNotification}" = 'Y' ]]  || [[ "${InputEnableNewRelicNotification}" = 'YES' ]]; then
         InputNewRelicNotification="On"
-        _echo -n "<33>  > Your New Relic API key:<0> "
+        _out -n "<33>  > Your New Relic API key:<0> "
         read InputNewRelicApiKey
-        _echo -n "<33>  > Your New Relic application id:<0> "
+        _out -n "<33>  > Your New Relic application id:<0> "
         read InputNewRelicApplicationId
     else
         InputNewRelicNotification="Off"
@@ -251,7 +251,7 @@ while [[ "${1}" = -* ]]; do
 
         --type | -t)
             if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
-                _echo "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>" 1>&2
+                _err "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>"
                 _exit 1
             fi
 
@@ -259,7 +259,7 @@ while [[ "${1}" = -* ]]; do
         ;;
 
         -*)
-            _echo "<31>Unrecognized option '${1}'. Run '--help' for more info.<0>" 1>&2
+            _err "<31>Unrecognized option '${1}'. Run '--help' for more info.<0>"
             _exit 2
         ;;
 
@@ -296,42 +296,42 @@ declare -r APPLICATION_REPOSITORY=$(_conf_get Repository)
 declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/src/$(echo "${APPLICATION_REPOSITORY}" | _tool_clearname)"
 
 ## -------------------------------------------------------------------------- ##
-_echo "<32;1>   ___           __
+_out "<32;1>   ___           __
   / _ \___ ___  / /__  __ _____ ____
  / // / -_) _ \/ / _ \/ // / -_) __/
 /____/\__/ .__/_/\___/\_, /\__/_/
         /_/          /___/          <0>"
-_echo "<36>Deploying <36;1>${APPLICATION_NAME}<0><36> as <36;1>${DEPLOY_USER}<0>"
-_echo
+_out "<36>Deploying <36;1>${APPLICATION_NAME}<0><36> as <36;1>${DEPLOY_USER}<0>"
+_out
 
 ## -------------------------------------------------------------------------- ##
 if [[ ${YES} -eq 1 ]]; then
     answer='YES'
 elif [ ${SCRIPT_INTERACTIVE} -eq 1 ]; then
-    _echo -n "Are you sure that you want to deploy <32>${DEPLOY_TYPE}<0>"
+    _out -n "Are you sure that you want to deploy <32>${DEPLOY_TYPE}<0>"
     if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
-        _echo -n " from <32>${GIT_TREE_ISH}<0>"
+        _out -n " from <32>${GIT_TREE_ISH}<0>"
     fi
-    _echo -n " on <32>${ENVIRONMENT}<0> environment? [y/N]: "
+    _out -n " on <32>${ENVIRONMENT}<0> environment? [y/N]: "
     read answer
 elif [[ ${YES} -eq 0 ]]; then
-    _echo "<31>You can not run \`${SCRIPT_NAME}\` in non-interactive mode without pass '--yes/-y' option.<0>" 1>&2
+    _err "<31>You can not run \`${SCRIPT_NAME}\` in non-interactive mode without pass '--yes/-y' option.<0>"
     _exit 12
 fi
 
 parsed_answer=$(echo ${answer} | tr '[:lower:]' '[:upper:]')
 if [[ "${parsed_answer}" != 'Y' ]] && [[ "${parsed_answer}" != 'YES' ]]; then
-    _echo "<31>Deploy aborted<0>" 1>&2
+    _err "<31>Deploy aborted<0>"
     _exit 13
 elif [ -f "${DEPLOY_LOCK_FILE}" ]; then
-    _echo \
+    _err \
         "<31>A deploy on this environment is already running.<0>" \
-        "<31>Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>" 1>&2
+        "<31>Wait or remove the lock file \`${DEPLOY_LOCK_FILE}\`<0>"
     _exit 14
 fi
 
 ## -------------------------------------------------------------------------- ##
-_echo "<33>Checking superuser privileges<0>"
+_out "<33>Checking superuser privileges<0>"
 if [[ ${SCRIPT_INTERACTIVE} -eq 1 ]]; then
     sudo mkdir -p "/var/run/deployer" > /dev/null
     if [[ ${?} -gt 0 ]]; then
@@ -342,33 +342,33 @@ if [[ ${SCRIPT_INTERACTIVE} -eq 1 ]]; then
 fi
 
 if [[ ${SUDO_PRIVILEGES} -eq 0 ]]; then
-    _echo "<31>You don't have superuser privileges<0>" 1>&2
+    _err "<31>You don't have superuser privileges<0>"
     _exit 11
 else
-    _echo "<32>You have superuser privileges<0>"
+    _out "<32>You have superuser privileges<0>"
 fi
 
 _lock_create
 
 ## -------------------------------------------------------------------------- ##
 if [[ ! -f "${ENVIRONMENT_SERVERS}" ]]; then
-    _echo "<31>Unable to find \"${ENVIRONMENT}.servers\" file<0>" 1>&2
+    _err "<31>Unable to find \"${ENVIRONMENT}.servers\" file<0>"
     _exit 22
 fi
 
 DEPLOY_DESCRIPTION="Deploy ${DEPLOY_TYPE} of ${GIT_TREE_ISH} on ${ENVIRONMENT}"
 
-_echo
-_echo -n "<32>Deploying \"${DEPLOY_TYPE}\"<0>"
+_out
+_out -n "<32>Deploying \"${DEPLOY_TYPE}\"<0>"
 if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
-    _echo -n "<32> from \"${GIT_TREE_ISH}\"<0>"
+    _out -n "<32> from \"${GIT_TREE_ISH}\"<0>"
 fi
-_echo "<32> on \"${ENVIRONMENT}\" environment<0>"
+_out "<32> on \"${ENVIRONMENT}\" environment<0>"
 
 _log 'Starting deploy'
 
 ## -------------------------------------------------------------------------- ##
-_echo "\n<33>Checking access to servers<0>"
+_out "\n<33>Checking access to servers<0>"
 
 PIDS=""
 IS_ALLOWED=1
@@ -394,14 +394,14 @@ for PID in ${PIDS}; do
 done
 
 test ${IS_ALLOWED} -eq 0 &&
-    _echo "<31>Please, check your SSH key or server availability and try again later.<0>" 1>&2 &&
+    _err "<31>Please, check your SSH key or server availability and try again later.<0>" &&
     _exit 15
 
 ## -------------------------------------------------------------------------- ##
 if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
 
     ## ---------------------------------------------------------------------- ##
-    _echo "\n<33>Fetching data from remote repository<0>"
+    _out "\n<33>Fetching data from remote repository<0>"
     if [ ! -d "${APPLICATION_SOURCE}/.git" ]; then
         git clone "${APPLICATION_REPOSITORY}" "${APPLICATION_SOURCE}"
     fi
@@ -409,14 +409,14 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     git fetch "${GIT_REMOTE}"
 
     if [ -d "${ENVIRONMENT_NEWEST}" ]; then
-        _echo "\n<33>Removing trash of some older deploy<0>"
+        _out "\n<33>Removing trash of some older deploy<0>"
         rm -rf "${ENVIRONMENT_NEWEST}"
     fi
 
     ## ---------------------------------------------------------------------- ##
-    _echo "\n<33>Preparing application code<0>"
+    _out "\n<33>Preparing application code<0>"
 
-    _echo "* Creating new code"
+    _out "* Creating new code"
     mkdir -p "${ENVIRONMENT_NEWEST}"
 
     git tag -l | egrep -q "^${GIT_TREE_ISH}$"
@@ -426,7 +426,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     git archive "${GIT_TREE_ISH}" | tar -x -C "${ENVIRONMENT_NEWEST}"
 
     if [[ ${?} -gt 0 ]]; then
-        _echo "<31>Failure creating new code<0>" 1>&2
+        _err "<31>Failure creating new code<0>"
         _exit 16
     fi
 
@@ -435,26 +435,25 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     GIT_LOG_AUTHOR=$(echo "${GIT_LOG}" | cut -d '|' -f 2)
     GIT_LOG_SUBJECT=$(echo "${GIT_LOG}" | cut -d '|' -f 3-)
 
-    REV_CONTENT="Timestamp: ${TIMESTAMP}\n"
     REV_CONTENT="${REV_CONTENT}Date-Time: ${DATETIME}\n"
     REV_CONTENT="${REV_CONTENT}Tree-Ish:  ${GIT_TREE_ISH}\n"
     REV_CONTENT="${REV_CONTENT}Author:    ${GIT_LOG_AUTHOR}\n"
     REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
     REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
 
-    _echo "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
+    _out "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
 
     if [ -d "${ENVIRONMENT_OLDEST}" ]; then
-        _echo "* Removing old code"
+        _out "* Removing old code"
         sudo rm -rf "${ENVIRONMENT_OLDEST}"
     fi
 
     if [ -d "${ENVIRONMENT_CURRENT}" ]; then
-        _echo "* Creating backup of current code"
+        _out "* Creating backup of current code"
         sudo mv "${ENVIRONMENT_CURRENT}" "${ENVIRONMENT_OLDEST}"
     fi
 
-    _echo "* Replacing current code with the new code"
+    _out "* Replacing current code with the new code"
     mv "${ENVIRONMENT_NEWEST}" "${ENVIRONMENT_CURRENT}"
 
     cd "${OLDPWD}"
@@ -474,7 +473,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     test -f "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" &&
         cp "${SETTINGS_DIRECTORY}/${ENVIRONMENT}.hooks/remote-post" "${ENVIRONMENT_CURRENT}/remote-post-env.hook"
 
-    _echo "* Applying overlays"
+    _out "* Applying overlays"
     export LC_ALL=C
     cat "${ENVIRONMENT_OVERLAY}" |
         egrep -v '^(#.+|\s*)$' |
@@ -490,7 +489,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
             IFS=' '
         done
 
-    _echo "* Running pre hooks"
+    _out "* Running pre hooks"
 
     HOOK_DEBUG=$(test ! -z "${VERBOSE}" && echo '-x')
 
@@ -498,7 +497,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         _log "Running local-pre-default.hook"
         sh ${HOOK_DEBUG} "local-pre-default.hook" >> "${DEPLOY_LOG_FILENAME}" 2>&1
         if [[ ${?} -gt 0 ]]; then
-            _echo "<31>An error occurred running \`local-pre-default.hook\`.<0>" 1>&2
+            _err "<31>An error occurred running \`local-pre-default.hook\`.<0>"
             tail "${DEPLOY_LOG_FILENAME}"
             _exit 17
         fi
@@ -509,17 +508,17 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
         _log "Running local-pre-env.hook"
         sh ${HOOK_DEBUG} "local-pre-env.hook" >> "${DEPLOY_LOG_FILENAME}" 2>&1
         if [[ ${?} -gt 0 ]]; then
-            _echo "<31>An error occurred running \`local-pre-env.hook\`.<0>" 1>&2
+            _err "<31>An error occurred running \`local-pre-env.hook\`.<0>"
             tail "${DEPLOY_LOG_FILENAME}"
             _exit 18
         fi
         _log "Finished local-pre-env.hook"
     fi
 
-    _echo "* Defining file system owner and group"
+    _out "* Defining file system owner and group"
     sudo chown -R "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "${ENVIRONMENT_CURRENT}" >> "${DEPLOY_LOG_FILENAME}" 2>&1
     if [[ ${?} -gt 0 ]]; then
-        _echo '<31>Failure when defining file system owner and group<0>' 1>&2
+        _err '<31>Failure when defining file system owner and group<0>'
         tail "${DEPLOY_LOG_FILENAME}"
         _exit 21
     fi
@@ -534,7 +533,7 @@ else
 fi
 
 ## -------------------------------------------------------------------------- ##
-_echo "\n<33>Syncing code on servers<0>"
+_out "\n<33>Syncing code on servers<0>"
 PIDS=""
 IS_SYNCED=1
 DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION}. Servers:"
@@ -562,14 +561,14 @@ for PID in ${PIDS}; do
 done
 
 test ${IS_SYNCED} -eq 0 &&
-    _echo "<31>An error occurred when syncing servers. Please check with the administrator.<0>" 1>&2 &&
+    _err "<31>An error occurred when syncing servers. Please check with the administrator.<0>" &&
     _exit 19
 
 DEPLOY_DESCRIPTION="${DEPLOY_DESCRIPTION} was successful done."
 
 ## -------------------------------------------------------------------------- ##
 if [[ "$(_conf_get NewRelicNotification)" = "On" ]]; then
-    _echo '\n<33>Sending New Relic deploy notification'
+    _out '\n<33>Sending New Relic deploy notification'
 
     curl \
         -H "x-api-key:$(_conf_get NewRelicApiKey)" \
@@ -583,7 +582,7 @@ if [[ "$(_conf_get NewRelicNotification)" = "On" ]]; then
 fi
 
 ## -------------------------------------------------------------------------- ##
-_echo "\n<33>Deploying code on servers<0>"
+_out "\n<33>Deploying code on servers<0>"
 
 PIDS=""
 IS_DEPLOYED=1
@@ -609,11 +608,11 @@ for PID in ${PIDS}; do
 done
 
 test ${IS_DEPLOYED} -eq 0 &&
-    _echo "<31>An error occurred when deploying to servers. Please check with the administrator.<0>" 1>&2 &&
+    _err "<31>An error occurred when deploying to servers. Please check with the administrator.<0>" &&
     _exit 20
 
 ## -------------------------------------------------------------------------- ##
-_echo "\n<33>Cleaning code on servers<0>"
+_out "\n<33>Cleaning code on servers<0>"
 
 while read line; do
     test -z "${line}" && continue
@@ -628,11 +627,11 @@ done < "${ENVIRONMENT_SERVERS}"
 wait
 
 ## -------------------------------------------------------------------------- ##
-_echo "\n<33>Successful on deploying!<0>"
-_echo "* Application:   ${APPLICATION_NAME}"
-_echo "* Environment:   ${ENVIRONMENT}"
-_echo "* Started at:    ${DATETIME}"
-_echo "* Finished at:   $(date '+%Y-%m-%d %H:%M:%S')"
-_echo "* Tree-Ish:      ${GIT_TREE_ISH}"
-_echo "* Type:          ${DEPLOY_TYPE}"
+_out "\n<33>Successful on deploying!<0>"
+_out "* Application:   ${APPLICATION_NAME}"
+_out "* Environment:   ${ENVIRONMENT}"
+_out "* Started at:    ${DATETIME}"
+_out "* Finished at:   $(date '+%Y-%m-%d %H:%M:%S')"
+_out "* Tree-Ish:      ${GIT_TREE_ISH}"
+_out "* Type:          ${DEPLOY_TYPE}"
 _exit 0

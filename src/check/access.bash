@@ -10,9 +10,9 @@ EOF
     code=${?}
 
     if [[ ${code} -gt 0 ]]; then
-        _echo "<31>Unable to access server ${server_name} (${server_address})<0>" 1>&2
+        _err "<31>Unable to access server ${server_name} (${server_address})<0>"
     else
-        _echo "<32>Able to connect to the server ${server_name} (${server_address})<0>"
+        _out "<32>Able to connect to the server ${server_name} (${server_address})<0>"
     fi
 
     return ${code}

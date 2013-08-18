@@ -12,7 +12,7 @@ _deploy_prepare()
             _deploy_prepare_upgrade "${server_address}" >> "${server_log_filename}" 2>&1
         ;;
         *)
-            _echo "<31>Inválid deploy type<0>" 1>&2
+            _err "<31>Inválid deploy type<0>"
             exit 1
         ;;
     esac
@@ -20,9 +20,9 @@ _deploy_prepare()
     code=${?}
 
     if [[ ${code} -gt 0 ]]; then
-        _echo "<31>Failure when syncing server ${server_name} (${server_address})<0>" 1>&2
+        _err "<31>Failure when syncing server ${server_name} (${server_address})<0>"
     else
-        _echo "<32>Success on syncing server ${server_name} (${server_address})<0>"
+        _out "<32>Success on syncing server ${server_name} (${server_address})<0>"
     fi
 
     return ${code}

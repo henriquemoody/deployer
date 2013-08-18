@@ -1,4 +1,4 @@
-_echo()
+_out()
 {
     local params
     local message
