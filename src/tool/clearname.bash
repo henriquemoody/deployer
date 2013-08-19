@@ -5,5 +5,5 @@ _tool_clearname()
         name=$(cat /dev/stdin)
     fi
 
-    echo "${name}" | sed -E 's/[^a-zA-Z._-]+/./g'
+    echo "${name}" | sed -E 's/[^a-zA-Z0-9._-]+/./g'
 }
