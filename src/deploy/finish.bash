@@ -39,9 +39,9 @@ EOF
     code=${?}
 
     if [[ ${code} -gt 0 ]]; then
-        _echo "<31>Failure when deploying to server ${server_name} (${server_address})<0>"
+        _out "<31>Failure when deploying to server ${server_name} (${server_address})<0>"
     else
-        _echo "<32>Success on deploying to server ${server_name} (${server_address})<0>"
+        _out "<32>Success on deploying to server ${server_name} (${server_address})<0>"
     fi
 
     return ${code}

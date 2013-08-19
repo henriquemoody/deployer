@@ -21,6 +21,10 @@ _log()
     fi
     category=$(echo "${category}" | tr [A-Z] [a-z])
 
+    if [[ -z "${DEPLOY_LOG_FILENAME}" ]]; then
+        return 1
+    fi
+
     if [[ -z "${filename}" ]]; then
         filename="${DEPLOY_LOG_FILENAME}"
     fi
