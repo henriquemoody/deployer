@@ -441,7 +441,7 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
     REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
 
-    _out "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
+    echo "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
 
     if [ -d "${ENVIRONMENT_OLDEST}" ]; then
         _out "* Removing old code"
