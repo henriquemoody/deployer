@@ -110,6 +110,10 @@ done
 set - ${ARGS}
 
 ## -------------------------------------------------------------------------- ##
+trap '_exit 102' SIGINT
+trap '_exit 115' SIGTERM
+
+## -------------------------------------------------------------------------- ##
 if [[ ! -f "${APPLICATION_CONFIG}" ]]; then
     if [ ${SCRIPT_INTERACTIVE} -eq 0 ]; then
         _err "<31>You do not have configuration file, please run it in an interactive shell first.<0>"
