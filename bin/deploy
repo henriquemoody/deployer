@@ -435,13 +435,14 @@ if [[ "${DEPLOY_TYPE}" == "upgrade" ]]; then
     GIT_LOG_AUTHOR=$(echo "${GIT_LOG}" | cut -d '|' -f 2)
     GIT_LOG_SUBJECT=$(echo "${GIT_LOG}" | cut -d '|' -f 3-)
 
-    REV_CONTENT="${REV_CONTENT}Date-Time: ${DATETIME}\n"
-    REV_CONTENT="${REV_CONTENT}Tree-Ish:  ${GIT_TREE_ISH}\n"
-    REV_CONTENT="${REV_CONTENT}Author:    ${GIT_LOG_AUTHOR}\n"
-    REV_CONTENT="${REV_CONTENT}Commit:    ${GIT_LOG_HASH}\n"
-    REV_CONTENT="${REV_CONTENT}Message:   ${GIT_LOG_SUBJECT}\n"
-
-    echo "${REV_CONTENT}" > "${ENVIRONMENT_NEWEST}/rev.txt"
+    cat > "${ENVIRONMENT_NEWEST}/rev.txt" <<CONTENT
+Date-Time:  ${DATETIME}
+Deployer:   ${DEPLOY_USER}
+Tree-Ish:   ${GIT_TREE_ISH}
+Author:     ${GIT_LOG_AUTHOR}
+Commit:     ${GIT_LOG_HASH}
+Message:    ${GIT_LOG_SUBJECT}
+CONTENT
 
     if [ -d "${ENVIRONMENT_OLDEST}" ]; then
         _out "* Removing old code"
@@ -628,10 +629,11 @@ wait
 
 ## -------------------------------------------------------------------------- ##
 _out "\n<33>Successful on deploying!<0>"
-_out "* Application:   ${APPLICATION_NAME}"
-_out "* Environment:   ${ENVIRONMENT}"
-_out "* Started at:    ${DATETIME}"
-_out "* Finished at:   $(date '+%Y-%m-%d %H:%M:%S')"
-_out "* Tree-Ish:      ${GIT_TREE_ISH}"
-_out "* Type:          ${DEPLOY_TYPE}"
+_out "* Application:    ${APPLICATION_NAME}"
+_out "* Environment:    ${ENVIRONMENT}"
+_out "* Deployer:       ${DEPLOY_USER}"
+_out "* Started at:     ${DATETIME}"
+_out "* Finished at:    $(date '+%Y-%m-%d %H:%M:%S')"
+_out "* Tree-Ish:       ${GIT_TREE_ISH}"
+_out "* Type:           ${DEPLOY_TYPE}"
 _exit 0
