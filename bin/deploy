@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Usage: {script} OPTIONS
 #
-#   --help, -h      Displays this help
-#   --version, -V   Displays the script version
-#   --upgrade, -u   Upgrade deploy script
+#   --help, -h          Displays this help
+#   --upgrade, -u       Upgrade deploy script
+#   --version, -V       Displays the script version
 #
-#   --env, -e       Environment to deploy
-#   --config, -c    Displays configuration information
-#   --remote, -r    Git remote name (default "origin")
-#   --tree-ish, -i  Tree-Ish (branch or tag name, default "master")
-#   --type, -t      Type of deploy ("upgrade" or "rollback")
-#   --verbose, -v   Enable verbose mode
-#   --yes, -y       Performs the deployment without asking
+#   --config, -c        Displays configuration information
+#   --env, -e           Environment to deploy
+#   --repository, -r    Git repository URL
+#   --tree-ish, -i      Tree-Ish (branch or tag name, default "master")
+#   --type, -t          Type of deploy ("upgrade" or "rollback")
+#   --verbose, -v       Enable verbose mode
+#   --yes, -y           Performs the deployment without asking
 #
 # Report bugs to Henrique Moody <henriquemoody@gmail.com>
 #
@@ -232,6 +232,12 @@ declare -r ENVIRONMENT_CURRENT="${SETTINGS_DIRECTORY}/var/${ENVIRONMENT}"
 declare -r ENVIRONMENT_NEWEST="${SETTINGS_DIRECTORY}/var/${ENVIRONMENT}.newest"
 declare -r ENVIRONMENT_OLDEST="${SETTINGS_DIRECTORY}/var/${ENVIRONMENT}.oldest"
 
+declare APPLICATION_DIRECTORY=$(_conf_get Directory)
+declare APPLICATION_GROUP=$(_conf_get FileSystemGroup)
+declare APPLICATION_NAME=$(_conf_get Name)
+declare APPLICATION_OWNER=$(_conf_get FileSystemOwner)
+declare APPLICATION_REPOSITORY=$(_conf_get Repository)
+
 ## -------------------------------------------------------------------------- ##
 while [[ "${1}" = -* ]]; do
     case "${1}" in
@@ -241,8 +247,8 @@ while [[ "${1}" = -* ]]; do
             _exit 0
         ;;
 
-        --remote | -r)
-            GIT_REMOTE="${2}"
+        --repository | -r)
+            APPLICATION_REPOSITORY="${2}"
         ;;
 
         --timeout | -m)
@@ -292,11 +298,6 @@ declare -r DEPLOY_LOCK_FILE="/var/run/deployer/${ENVIRONMENT}.pid"
 declare -r DEPLOY_LOG_BASE="${SETTINGS_DIRECTORY}/var/log/${ENVIRONMENT}_${DATETIME_CLEAR}"
 declare -r DEPLOY_LOG_FILENAME="${DEPLOY_LOG_BASE}.log"
 
-declare -r APPLICATION_DIRECTORY=$(_conf_get Directory)
-declare -r APPLICATION_GROUP=$(_conf_get FileSystemGroup)
-declare -r APPLICATION_NAME=$(_conf_get Name)
-declare -r APPLICATION_OWNER=$(_conf_get FileSystemOwner)
-declare -r APPLICATION_REPOSITORY=$(_conf_get Repository)
 declare -r APPLICATION_SOURCE="${SETTINGS_DIRECTORY}/src/$(echo "${APPLICATION_REPOSITORY}" | _tool_clearname)"
 
 ## -------------------------------------------------------------------------- ##
