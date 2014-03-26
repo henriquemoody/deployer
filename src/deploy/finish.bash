@@ -5,9 +5,8 @@ _deploy_finish()
     local server_log_filename="${DEPLOY_LOG_BASE}-${server_name}.log"
 
     _ssh "${server_address}" >> "${server_log_filename}" 2>&1 <<EOF
-if [[ "${VERBOSE}" = "v" ]]; then
-    set -x
-fi
+set -e
+set -x
 
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
     ln -sfn "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}"

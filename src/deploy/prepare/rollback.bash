@@ -3,13 +3,11 @@ _deploy_prepare_rollback()
     local server_address="${1}"
 
     _ssh "${server_address}" <<EOF
-if [[ "${VERBOSE}" = "v" ]]; then
-    set -x
-fi
+set -e
+set -x
 
 test ! -d "${APPLICATION_DIRECTORY}.oldest" &&
-    echo "Unable to find ${APPLICATION_DIRECTORY}.oldest" &&
-    exit 1
+    echo "Unable to find ${APPLICATION_DIRECTORY}.oldest"
 
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
     cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"

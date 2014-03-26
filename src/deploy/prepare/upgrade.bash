@@ -4,16 +4,11 @@ _deploy_prepare_upgrade()
     local options="${SSH_OPTIONS}"
 
     _ssh "${server_address}" <<EOF
-if [[ "${VERBOSE}" = "v" ]]; then
-    set -x
-fi
+set -e
+set -x
 
 if [[ ! -d "${APPLICATION_DIRECTORY}" ]]; then
     sudo mkdir -p${VERBOSE} "$(dirname "${APPLICATION_DIRECTORY}")"
-
-    test ${?} -gt 0 &&
-        echo "Failure creating base directory" &&
-        exit 1
 fi
 
 sudo chown "${APPLICATION_OWNER}:${APPLICATION_GROUP}" "$(dirname "${APPLICATION_DIRECTORY}")"
@@ -41,9 +36,8 @@ EOF
         exit 2
 
     _ssh "${server_address}" <<EOF
-if [[ "${VERBOSE}" = "v" ]]; then
-    set -x
-fi
+set -e
+set -x
 
 sudo -u "${APPLICATION_OWNER}" -g "${APPLICATION_GROUP}" \
     cp -r "${APPLICATION_DIRECTORY}.current" "${APPLICATION_DIRECTORY}.backup"
