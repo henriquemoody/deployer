@@ -5,11 +5,16 @@
 #   --upgrade, -u       Upgrade deploy script
 #   --version, -V       Displays the script version
 #
-#   --config, -c        Displays configuration information
+# Required options
+#
 #   --env, -e           Environment to deploy
-#   --repository, -r    Git repository URL
 #   --tree-ish, -i      Tree-Ish (branch or tag name, default "master")
 #   --type, -t          Type of deploy ("upgrade" or "rollback")
+#
+# Other options
+#
+#   --config, -c        Displays configuration information
+#   --repository, -r    Git repository URL
 #   --verbose, -v       Enable verbose mode
 #   --yes, -y           Performs the deployment without asking
 #
@@ -35,11 +40,10 @@ declare -r DEPLOY_USER=$(test ! -z "${SUDO_USER}" && echo "${SUDO_USER}" || whoa
 declare -r DEPLOYER_LOG="/var/log/deployer.log"
 declare -r LOCAL_ADDRESS=$(hostname)
 
-declare DEPLOY_TYPE="upgrade"
-declare ENVIRONMENT="live"
+declare DEPLOY_TYPE
+declare ENVIRONMENT
+declare GIT_TREE_ISH
 declare GIT_REMOTE="origin"
-declare GIT_TREE_ISH="master"
-declare SUDO_PRIVILEGES=$(sudo -n echo > /dev/null 2>&1; test ${?} -gt 0 && echo 0 || echo 1)
 declare VERBOSE=""
 declare YES=0
 
@@ -84,12 +88,43 @@ while [[ ! -z "${1}" ]]; do
             shift 1
         ;;
 
+        --tree-ish | -i)
+            GIT_TREE_ISH="${2}"
+            shift 2
+        ;;
+
+        --type | -t)
+            if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
+                _err "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>"
+                _exit 1
+            fi
+
+            DEPLOY_TYPE="${2}"
+            shift 2
+        ;;
+
         *)
             ARGS="${ARGS} ${1}"
             shift
         ;;
     esac
 done
+
+if [[ -z "${ENVIRONMENT}" ]]; then
+    _help 1>&2
+    _exit 23
+fi
+
+if [[ -z "${GIT_TREE_ISH}" ]]; then
+    _help 1>&2
+    _exit 24
+fi
+
+if [[ -z "${DEPLOY_TYPE}" ]]; then
+    _help 1>&2
+    _exit 25
+fi
+
 set - ${ARGS}
 
 ## -------------------------------------------------------------------------- ##
@@ -238,19 +273,6 @@ while [[ "${1}" = -* ]]; do
             SSH_CONNECTION_TIMEOUT="${2}"
         ;;
 
-        --tree-ish | -i)
-            GIT_TREE_ISH="${2}"
-        ;;
-
-        --type | -t)
-            if [[ "${2}" != 'rollback' ]] && [[ "${2}" != 'upgrade' ]]; then
-                _err "<31>Argument '${1}' must be 'rollback' or 'upgrade'. See '--help' for more info.<0>"
-                _exit 1
-            fi
-
-            DEPLOY_TYPE="${2}"
-        ;;
-
         -*)
             _err "<31>Unrecognized option '${1}'. Run '--help' for more info.<0>"
             _exit 2
@@ -320,6 +342,7 @@ fi
 
 ## -------------------------------------------------------------------------- ##
 _out "<33>Checking superuser privileges<0>"
+declare SUDO_PRIVILEGES=$(sudo -n echo > /dev/null 2>&1; test ${?} -gt 0 && echo 0 || echo 1)
 if [[ ${SCRIPT_INTERACTIVE} -eq 1 ]]; then
     sudo mkdir -p "/var/run/deployer" > /dev/null
     if [[ ${?} -gt 0 ]]; then
