@@ -1,7 +1,11 @@
+This project was discontinued.
+
+--
+
 Deployer
 ========
 
-Atomic deployments with bash script.
+Deployments with bash script.
 
 Installing
 ----------
